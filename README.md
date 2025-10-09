@@ -23,18 +23,19 @@ A fast and simple command-line utility for Windows that allows you to list all p
 ### Building from Source
 
 1. Clone this repository:
-
+```
 git clone https://github.com/appsjuragan/diskOfflaner.git
 cd diskOfflaner
+```
 
 2. Build the release version:
-
+```
 cargo build --release
-
+```
 3. The executable will be located at:
-
+```
 target\release\diskofflaner.exe
-
+```
 ## Usage
 
 **Important:** This program requires administrator privileges. Always run as administrator.
@@ -42,11 +43,11 @@ target\release\diskofflaner.exe
 ### Interactive Mode
 
 Run without arguments to enter interactive mode:
-
+```
 diskofflaner.exe
-
+```
 Output:
-
+```
 DiskOfflaner - Disk Management Tool
 ====================================
 
@@ -61,19 +62,19 @@ Disk 3: Disk 3 - Online - Health: 0 - Size: 465.76 GB
    └─ Partition 0: 464.92 GB (GPT: 7500000) [C:]
 
 Enter disk number to toggle (or 'q' to quit): 
-
+```
 ### Direct Command Mode
 
 Toggle a specific disk directly by providing the disk number as an argument:
-
+```
 diskofflaner.exe 2
-
+```
 Output:
-
+```
 Checking disk 2 status...
 Disk 2 is currently Offline. Bringing it Online...
 Disk is now Online.
-
+```
 ## Running as Administrator
 
 ### Method 1: Right-Click
@@ -84,13 +85,13 @@ Disk is now Online.
 ### Method 2: PowerShell/CMD as Admin
 1. Press Win + X and select "Windows PowerShell (Admin)"
 2. Navigate to the directory:
-
+```
 cd path\to\diskofflaner
-
+```
 3. Run the program:
-
+```
 .\diskofflaner.exe
-
+```
 ### Method 3: Run Dialog
 1. Press Win + R
 2. Type powershell and press Ctrl + Shift + Enter
@@ -120,7 +121,7 @@ DiskOfflaner uses Windows API calls through the winapi crate to:
 - anyhow - Error handling
 
 ## Project Structure
-
+```
 diskofflaner/
 ├── src/
 │   ├── main.rs              # Main entry point and UI
@@ -129,11 +130,11 @@ diskofflaner/
 ├── Cargo.toml
 ├── .gitignore
 └── README.md
-
+```
 ## License
-
+```
 This project is a Rust port of the original .NET diskOfflaner (https://github.com/appsjuragan/diskOfflaner) by appsjuragan.
-
+```
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -150,6 +151,7 @@ Verify the disk number using Windows Disk Management (diskmgmt.msc) or diskpart.
 The program uses diskpart to check disk status. Ensure diskpart is available in your system PATH.
 
 ## Acknowledgments
-
+```
 - Original .NET implementation: appsjuragan/diskOfflaner (https://github.com/appsjuragan/diskOfflaner)
 - Rust Windows API bindings: winapi-rs (https://github.com/retep998/winapi-rs)
+```
