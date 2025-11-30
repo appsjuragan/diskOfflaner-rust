@@ -1,0 +1,241 @@
+use anyhow::Result;
+use eframe::egui;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
+use crate::disk_operations::enumerate_disks;
+use crate::disk_operations::{set_disk_online, set_disk_offline};
+use crate::structs::DiskInfo;
+
+pub fn run_gui() -> Result<()> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "DiskOfflaner GUI",
+        options,
+        Box::new(|_cc| Box::new(DiskApp::default())),
+    )
+    .map_err(|e| anyhow::anyhow!("GUI Error: {}", e))
+}
+
+#[derive(Default)]
+struct DiskApp {
+    disks: Vec<DiskInfo>,
+    error: Option<String>,
+    pending_offline_disk: Option<u32>,
+    processing_disk: Option<u32>,
+    op_receiver: Option<Receiver<Result<(), String>>>,
+}
+
+impl eframe::App for DiskApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for background operation results
+        if let Some(rx) = &self.op_receiver {
+            if let Ok(result) = rx.try_recv() {
+                self.processing_disk = None;
+                self.op_receiver = None;
+                match result {
+                    Ok(_) => {
+                        self.disks.clear(); // Trigger refresh
+                    }
+                    Err(e) => {
+                        self.error = Some(format!("Operation failed: {}", e));
+                    }
+                }
+            }
+        }
+
+        // Processing Dialog
+        if self.processing_disk.is_some() {
+            egui::Window::new("Processing")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Please wait, disk operation in progress...");
+                    });
+                });
+            ctx.request_repaint(); // Ensure spinner animates
+        }
+
+        // Confirmation Dialog
+        if let Some(disk_num) = self.pending_offline_disk {
+            egui::Window::new("⚠️ Critical Warning")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.label(egui::RichText::new("You are about to set a SYSTEM/BOOT disk Offline!").color(egui::Color32::RED).strong());
+                    ui.label("This can cause system instability or crashes.");
+                    ui.label("Are you absolutely sure you want to continue?");
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Yes, Set Offline").clicked() {
+                            self.pending_offline_disk = None;
+                            self.start_disk_operation(disk_num, true); // true = currently online, so set offline
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.pending_offline_disk = None;
+                        }
+                    });
+                });
+        }
+
+        // Top Panel for Title and Theme Toggle
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("DiskOfflaner");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let is_dark = ctx.style().visuals.dark_mode;
+                    let icon = if is_dark { "☀️" } else { "🌙" };
+                    let text = if is_dark { "Light Mode" } else { "Dark Mode" };
+                    if ui.button(format!("{} {}", icon, text)).clicked() {
+                        if is_dark {
+                            ctx.set_visuals(egui::Visuals::light());
+                        } else {
+                            ctx.set_visuals(egui::Visuals::dark());
+                        }
+                    }
+                });
+            });
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.separator();
+
+            // Disable interaction if processing
+            ui.set_enabled(self.processing_disk.is_none());
+
+            if self.disks.is_empty() && self.error.is_none() {
+                 match enumerate_disks() {
+                    Ok(d) => {
+                        self.disks = d;
+                        self.error = None;
+                    }
+                    Err(e) => {
+                        self.error = Some(format!("Failed to enumerate disks: {}", e));
+                    }
+                }
+            }
+
+            if let Some(err) = &self.error {
+                ui.colored_label(egui::Color32::RED, err);
+                if ui.button("Retry").clicked() {
+                    self.error = None;
+                    self.disks.clear();
+                }
+            }
+
+            if self.disks.is_empty() && self.error.is_none() {
+                ui.label("No disks found.");
+                if ui.button("Refresh").clicked() {
+                    self.disks.clear();
+                }
+                return;
+            }
+
+            // Scroll area for disks
+            let disks_view = self.disks.clone();
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for disk in &disks_view {
+                    let border_color = if disk.is_system_disk {
+                        egui::Color32::from_rgb(255, 165, 0) // Orange for system disk
+                    } else {
+                        ui.visuals().widgets.noninteractive.bg_stroke.color
+                    };
+                    
+                    egui::Frame::group(ui.style())
+                        .stroke(egui::Stroke::new(1.0, border_color))
+                        .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            // HDD Icon
+                            ui.label(egui::RichText::new("🖴").size(24.0));
+
+                            let status = if disk.is_online { "Online" } else { "Offline" };
+                            let status_color = if disk.is_online { egui::Color32::GREEN } else { egui::Color32::RED };
+                            
+                            ui.colored_label(status_color, format!("● {}", status));
+                            
+                            if disk.is_system_disk {
+                                ui.add_space(5.0);
+                                ui.label(egui::RichText::new("[SYSTEM]").color(egui::Color32::RED).strong());
+                            }
+
+                            ui.add_space(5.0);
+                            
+                            // Avoid "Disk 0: Disk 0" redundancy
+                            let model_display = if disk.model == format!("Disk {}", disk.disk_number) {
+                                disk.model.clone()
+                            } else {
+                                format!("Disk {}: {}", disk.disk_number, disk.model)
+                            };
+
+                            let info_text = egui::RichText::new(format!(
+                                "{} - Size: {:.2} GB",
+                                model_display,
+                                disk.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+                            ));
+                            
+                            let info_text = if disk.is_system_disk {
+                                info_text.color(egui::Color32::from_rgb(255, 165, 0)).strong()
+                            } else {
+                                info_text
+                            };
+                            
+                            ui.label(info_text);
+                            
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let button_label = if disk.is_online { "Set Offline" } else { "Set Online" };
+                                if ui.button(button_label).clicked() {
+                                    if disk.is_online && disk.is_system_disk {
+                                        // Trigger confirmation for system disk offline
+                                        self.pending_offline_disk = Some(disk.disk_number);
+                                    } else {
+                                        self.start_disk_operation(disk.disk_number, disk.is_online);
+                                    }
+                                }
+                            });
+                        });
+                        
+                        // Show partitions
+                        if !disk.partitions.is_empty() {
+                            ui.indent("partitions", |ui| {
+                                for part in &disk.partitions {
+                                    ui.label(format!(
+                                        "Partition {}: {:.2} GB ({})",
+                                        part.partition_number,
+                                        part.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                                        part.drive_letter
+                                    ));
+                                }
+                            });
+                        }
+                    });
+                    ui.add_space(5.0);
+                }
+            });
+            
+            ui.separator();
+            if ui.button("Refresh List").clicked() {
+                self.disks.clear();
+            }
+        });
+    }
+}
+
+impl DiskApp {
+    fn start_disk_operation(&mut self, disk_number: u32, is_online: bool) {
+        self.processing_disk = Some(disk_number);
+        let (tx, rx) = channel();
+        self.op_receiver = Some(rx);
+
+        thread::spawn(move || {
+            let result = if is_online {
+                set_disk_offline(disk_number)
+            } else {
+                set_disk_online(disk_number)
+            };
+            let _ = tx.send(result.map_err(|e| e.to_string()));
+        });
+    }
+}

@@ -154,6 +154,18 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
         }
     }
 
+    // Sort by starting offset (partition_id stores it as hex)
+    partitions.sort_by(|a, b| {
+        let offset_a = u64::from_str_radix(&a.partition_id, 16).unwrap_or(0);
+        let offset_b = u64::from_str_radix(&b.partition_id, 16).unwrap_or(0);
+        offset_a.cmp(&offset_b)
+    });
+
+    // Assign incremental partition numbers
+    for (i, part) in partitions.iter_mut().enumerate() {
+        part.partition_number = (i + 1) as u32;
+    }
+
     Ok(partitions)
 }
 

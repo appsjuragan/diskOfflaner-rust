@@ -7,6 +7,7 @@ use std::ptr;
 
 mod disk_operations;
 mod structs;
+mod gui;
 
 use disk_operations::{enumerate_disks, set_disk_online, set_disk_offline};
 use structs::{DiskInfo, PartitionInfo};
@@ -26,44 +27,9 @@ fn main() -> Result<()> {
         let disk_number: u32 = args[1].parse().context("Invalid disk number")?;
         toggle_disk(disk_number)?;
     } else {
-        // Interactive mode
-        interactive_mode()?;
+        // Launch GUI mode
+        gui::run_gui()?;
     }
-
-    Ok(())
-}
-
-fn interactive_mode() -> Result<()> {
-    println!("{}", "DiskOfflaner - Disk Management Tool".cyan().bold());
-    println!("{}", "====================================".cyan());
-    println!();
-
-    let disks = enumerate_disks()?;
-
-    if disks.is_empty() {
-        println!("{}", "No disks found.".yellow());
-        return Ok(());
-    }
-
-    // Display all disks and partitions
-    for disk in &disks {
-        display_disk_info(disk);
-    }
-
-    println!();
-    print!("Enter disk number to toggle (or 'q' to quit): ");
-    io::stdout().flush()?;
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let input = input.trim();
-
-    if input.eq_ignore_ascii_case("q") {
-        return Ok(());
-    }
-
-    let disk_number: u32 = input.parse().context("Invalid disk number")?;
-    toggle_disk(disk_number)?;
 
     Ok(())
 }
@@ -134,13 +100,21 @@ fn toggle_disk(disk_number: u32) -> Result<()> {
     }
 
     if disk.is_online {
-        println!("Disk {} is currently {}. Bringing it {}...", 
-            disk_number, "Online".green(), "Offline".red());
+        println!(
+            "Disk {} is currently {}. Bringing it {}...",
+            disk_number,
+            "Online".green(),
+            "Offline".red()
+        );
         set_disk_offline(disk_number)?;
         println!("{}", "Disk is now Offline.".green());
     } else {
-        println!("Disk {} is currently {}. Bringing it {}...", 
-            disk_number, "Offline".red(), "Online".green());
+        println!(
+            "Disk {} is currently {}. Bringing it {}...",
+            disk_number,
+            "Offline".red(),
+            "Online".green()
+        );
         set_disk_online(disk_number)?;
         println!("{}", "Disk is now Online.".green());
     }
@@ -154,16 +128,13 @@ fn is_elevated() -> bool {
         use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcessToken};
         use winapi::um::securitybaseapi::GetTokenInformation;
         use winapi::um::winnt::{TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
-
         unsafe {
             let mut token_handle = ptr::null_mut();
             if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle) == 0 {
                 return false;
             }
-
             let mut elevation: TOKEN_ELEVATION = mem::zeroed();
             let mut return_length = 0u32;
-
             let result = GetTokenInformation(
                 token_handle,
                 TokenElevation,
@@ -171,17 +142,13 @@ fn is_elevated() -> bool {
                 mem::size_of::<TOKEN_ELEVATION>() as u32,
                 &mut return_length,
             );
-
             winapi::um::handleapi::CloseHandle(token_handle);
-
             if result == 0 {
                 return false;
             }
-
             elevation.TokenIsElevated != 0
         }
     }
-
     #[cfg(not(windows))]
     {
         false
