@@ -99,6 +99,7 @@ fn check_disk_online(disk_number: u32) -> bool {
     let script = format!("list disk\nexit\n");
 
     let output = match Command::new("diskpart")
+        .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -235,6 +236,10 @@ pub fn set_disk_offline(disk_number: u32) -> Result<()> {
     execute_disk_command(disk_number, "offline")
 }
 
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     let script = format!(
         "select disk {}\n{} disk\nexit\n",
@@ -242,6 +247,7 @@ fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     );
 
     let mut child = Command::new("diskpart")
+        .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

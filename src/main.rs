@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use anyhow::{Context, Result};
 use colored::*;
 use std::env;
@@ -13,14 +15,27 @@ use disk_operations::{enumerate_disks, set_disk_online, set_disk_offline};
 
 
 fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+
+    // If arguments are provided, try to attach to the parent console to show output
+    if args.len() > 1 {
+        #[cfg(windows)]
+        unsafe {
+            use winapi::um::wincon::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+
     // Check for admin privileges
     if !is_elevated() {
+        // If we attached console, this will print there. If not (GUI mode), it won't be seen, 
+        // but GUI mode usually requests elevation via manifest or user action.
+        // For GUI app, we might want to show a message box if not elevated, but the current logic just exits.
+        // Given the user runs as admin, this is fine.
         eprintln!("{}", "ERROR: This program requires administrative privileges.".red().bold());
         eprintln!("Please run as administrator.");
         std::process::exit(1);
     }
-
-    let args: Vec<String> = env::args().collect();
 
     if args.len() > 1 {
         // Direct command mode
