@@ -10,7 +10,7 @@ mod structs;
 mod gui;
 
 use disk_operations::{enumerate_disks, set_disk_online, set_disk_offline};
-use structs::{DiskInfo, PartitionInfo};
+
 
 fn main() -> Result<()> {
     // Check for admin privileges
@@ -34,43 +34,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn display_disk_info(disk: &DiskInfo) {
-    let status_color = if disk.is_online { "Online".green() } else { "Offline".red() };
-    let size_gb = disk.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
 
-    println!(
-        "{} {}: {} - {} - Health: {} - Size: {:.2} GB",
-        "Disk".bold(),
-        disk.disk_number.to_string().yellow().bold(),
-        disk.model.cyan(),
-        status_color,
-        disk.health_status,
-        size_gb
-    );
-
-    // Display partitions
-    for partition in &disk.partitions {
-        display_partition_info(partition);
-    }
-}
-
-fn display_partition_info(partition: &PartitionInfo) {
-    let size_gb = partition.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-    let drive_letter = if !partition.drive_letter.is_empty() {
-        format!("[{}:]", partition.drive_letter)
-    } else {
-        "[_:]".to_string()
-    };
-
-    println!(
-        "   └─ Partition {}: {:.2} GB ({}: {}) {}",
-        partition.partition_number,
-        size_gb,
-        partition.partition_style,
-        partition.partition_id,
-        drive_letter.bright_magenta()
-    );
-}
 
 fn toggle_disk(disk_number: u32) -> Result<()> {
     println!("Checking disk {} status...", disk_number);

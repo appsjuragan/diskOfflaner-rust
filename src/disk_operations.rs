@@ -63,7 +63,6 @@ pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
             model: format!("Disk {}", disk_number),
             size_bytes,
             is_online,
-            health_status: 0,
             is_system_disk,
             partitions,
         })
@@ -223,7 +222,6 @@ fn get_partition_on_disk(
             partition_number: 0,
             size_bytes: *extent.ExtentLength.QuadPart() as u64,
             drive_letter: drive_letter.to_string(),
-            partition_style: "GPT".to_string(),
             partition_id: format!("{:X}", extent.StartingOffset.QuadPart()),
         })
     }

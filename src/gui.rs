@@ -9,7 +9,7 @@ use crate::structs::DiskInfo;
 pub fn run_gui() -> Result<()> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "DiskOfflaner GUI",
+        "DiskOfflaner v1.0.0",
         options,
         Box::new(|cc| {
             // Default to Dark Mode
@@ -80,8 +80,12 @@ impl eframe::App for DiskApp {
                         self.refresh_disks(); // Refresh list after operation
                     }
                     Err(e) => {
-                        // Store the error to show a notification window
-                        self.operation_error = Some(e);
+                        // Provide a user-friendly message if the disk is in use
+                        if e.contains("in use") {
+                            self.operation_error = Some("Failed to take disk offline: disk is currently in use by active processes.".to_string());
+                        } else {
+                            self.operation_error = Some(e);
+                        }
                     }
                 }
             }
@@ -125,6 +129,44 @@ impl eframe::App for DiskApp {
                 });
         }
 
+
+        // Operation Error Notification
+        if let Some(err_msg) = self.operation_error.clone() {
+            egui::Window::new("Operation Error")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.colored_label(egui::Color32::RED, err_msg);
+                    if ui.button("OK").clicked() {
+                        self.operation_error = None;
+                    }
+                });
+        }
+
+        // Top Panel for Title and Theme Toggle
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("DiskOfflaner");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let is_dark = ctx.style().visuals.dark_mode;
+                    let text = if is_dark { "Light Mode" } else { "Dark Mode" };
+                    if ui.button(text).clicked() {
+                        if is_dark {
+                            // Switch to Light Mode with 95% Grey
+                            let mut visuals = egui::Visuals::light();
+                            let grey_95 = egui::Color32::from_gray(242);
+                            visuals.panel_fill = grey_95;
+                            visuals.window_fill = grey_95;
+                            visuals.widgets.noninteractive.bg_fill = grey_95;
+                            ctx.set_visuals(visuals);
+                        } else {
+                            ctx.set_visuals(egui::Visuals::dark());
+                        }
+                    }
+                });
+            });
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.separator();
@@ -172,11 +214,12 @@ impl eframe::App for DiskApp {
                         .stroke(egui::Stroke::new(1.0, border_color))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                // HDD Icon
-                                ui.label(egui::RichText::new("🖴").size(24.0));
                                 let status = if disk.is_online { "Online" } else { "Offline" };
                                 let status_color = if disk.is_online { egui::Color32::GREEN } else { egui::Color32::RED };
-                                ui.colored_label(status_color, format!("● {}", status));
+                                
+                                // Colored HDD Icon
+                                ui.label(egui::RichText::new("🖴").size(24.0).color(status_color));
+                                ui.colored_label(status_color, status);
                                 if disk.is_system_disk {
                                     ui.add_space(5.0);
                                     ui.label(egui::RichText::new("[SYSTEM]").color(egui::Color32::RED).strong());
