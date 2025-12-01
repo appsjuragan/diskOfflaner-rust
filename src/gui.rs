@@ -11,22 +11,65 @@ pub fn run_gui() -> Result<()> {
     eframe::run_native(
         "DiskOfflaner GUI",
         options,
-        Box::new(|_cc| Box::new(DiskApp::default())),
+        Box::new(|cc| {
+            // Default to Dark Mode
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            let mut app = DiskApp::default();
+            // Start initial load
+            app.refresh_disks();
+            Box::new(app)
+        }),
     )
     .map_err(|e| anyhow::anyhow!("GUI Error: {}", e))
 }
 
-#[derive(Default)]
 struct DiskApp {
     disks: Vec<DiskInfo>,
     error: Option<String>,
     pending_offline_disk: Option<u32>,
     processing_disk: Option<u32>,
     op_receiver: Option<Receiver<Result<(), String>>>,
+    // Async disk loading
+    is_loading_disks: bool,
+    disk_load_receiver: Option<Receiver<Result<Vec<DiskInfo>, String>>>,
+    // New field for operation errors (e.g., disk in use)
+    operation_error: Option<String>,
+}
+
+impl Default for DiskApp {
+    fn default() -> Self {
+        Self {
+            disks: Vec::new(),
+            error: None,
+            pending_offline_disk: None,
+            processing_disk: None,
+            op_receiver: None,
+            is_loading_disks: false,
+            disk_load_receiver: None,
+            operation_error: None,
+        }
+    }
 }
 
 impl eframe::App for DiskApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for disk load results
+        if let Some(rx) = &self.disk_load_receiver {
+            if let Ok(result) = rx.try_recv() {
+                self.is_loading_disks = false;
+                self.disk_load_receiver = None;
+                match result {
+                    Ok(d) => {
+                        self.disks = d;
+                        self.error = None;
+                    }
+                    Err(e) => {
+                        self.error = Some(format!("Failed to refresh disks: {}", e));
+                    }
+                }
+            }
+        }
+
         // Check for background operation results
         if let Some(rx) = &self.op_receiver {
             if let Ok(result) = rx.try_recv() {
@@ -34,10 +77,11 @@ impl eframe::App for DiskApp {
                 self.op_receiver = None;
                 match result {
                     Ok(_) => {
-                        self.disks.clear(); // Trigger refresh
+                        self.refresh_disks(); // Refresh list after operation
                     }
                     Err(e) => {
-                        self.error = Some(format!("Operation failed: {}", e));
+                        // Store the error to show a notification window
+                        self.operation_error = Some(e);
                     }
                 }
             }
@@ -81,24 +125,6 @@ impl eframe::App for DiskApp {
                 });
         }
 
-        // Top Panel for Title and Theme Toggle
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("DiskOfflaner");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let is_dark = ctx.style().visuals.dark_mode;
-                    let icon = if is_dark { "☀️" } else { "🌙" };
-                    let text = if is_dark { "Light Mode" } else { "Dark Mode" };
-                    if ui.button(format!("{} {}", icon, text)).clicked() {
-                        if is_dark {
-                            ctx.set_visuals(egui::Visuals::light());
-                        } else {
-                            ctx.set_visuals(egui::Visuals::dark());
-                        }
-                    }
-                });
-            });
-        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.separator();
@@ -106,30 +132,29 @@ impl eframe::App for DiskApp {
             // Disable interaction if processing
             ui.set_enabled(self.processing_disk.is_none());
 
-            if self.disks.is_empty() && self.error.is_none() {
-                 match enumerate_disks() {
-                    Ok(d) => {
-                        self.disks = d;
-                        self.error = None;
-                    }
-                    Err(e) => {
-                        self.error = Some(format!("Failed to enumerate disks: {}", e));
-                    }
-                }
+            if self.is_loading_disks {
+                ui.centered_and_justified(|ui| {
+                    ui.vertical(|ui| {
+                        ui.spinner();
+                        ui.label("Loading disk information...");
+                    });
+                });
+                ctx.request_repaint(); // Ensure spinner animates
+                return;
             }
 
             if let Some(err) = &self.error {
                 ui.colored_label(egui::Color32::RED, err);
                 if ui.button("Retry").clicked() {
                     self.error = None;
-                    self.disks.clear();
+                    self.refresh_disks();
                 }
             }
 
-            if self.disks.is_empty() && self.error.is_none() {
+            if self.disks.is_empty() && self.error.is_none() && !self.is_loading_disks {
                 ui.label("No disks found.");
                 if ui.button("Refresh").clicked() {
-                    self.disks.clear();
+                    self.refresh_disks();
                 }
                 return;
             }
@@ -143,92 +168,89 @@ impl eframe::App for DiskApp {
                     } else {
                         ui.visuals().widgets.noninteractive.bg_stroke.color
                     };
-                    
                     egui::Frame::group(ui.style())
                         .stroke(egui::Stroke::new(1.0, border_color))
                         .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            // HDD Icon
-                            ui.label(egui::RichText::new("🖴").size(24.0));
-
-                            let status = if disk.is_online { "Online" } else { "Offline" };
-                            let status_color = if disk.is_online { egui::Color32::GREEN } else { egui::Color32::RED };
-                            
-                            ui.colored_label(status_color, format!("● {}", status));
-                            
-                            if disk.is_system_disk {
+                            ui.horizontal(|ui| {
+                                // HDD Icon
+                                ui.label(egui::RichText::new("🖴").size(24.0));
+                                let status = if disk.is_online { "Online" } else { "Offline" };
+                                let status_color = if disk.is_online { egui::Color32::GREEN } else { egui::Color32::RED };
+                                ui.colored_label(status_color, format!("● {}", status));
+                                if disk.is_system_disk {
+                                    ui.add_space(5.0);
+                                    ui.label(egui::RichText::new("[SYSTEM]").color(egui::Color32::RED).strong());
+                                }
                                 ui.add_space(5.0);
-                                ui.label(egui::RichText::new("[SYSTEM]").color(egui::Color32::RED).strong());
-                            }
-
-                            ui.add_space(5.0);
-                            
-                            // Avoid "Disk 0: Disk 0" redundancy
-                            let model_display = if disk.model == format!("Disk {}", disk.disk_number) {
-                                disk.model.clone()
-                            } else {
-                                format!("Disk {}: {}", disk.disk_number, disk.model)
-                            };
-
-                            let info_text = egui::RichText::new(format!(
-                                "{} - Size: {:.2} GB",
-                                model_display,
-                                disk.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
-                            ));
-                            
-                            let info_text = if disk.is_system_disk {
-                                info_text.color(egui::Color32::from_rgb(255, 165, 0)).strong()
-                            } else {
-                                info_text
-                            };
-                            
-                            ui.label(info_text);
-                            
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let button_label = if disk.is_online { "Set Offline" } else { "Set Online" };
-                                if ui.button(button_label).clicked() {
-                                    if disk.is_online && disk.is_system_disk {
-                                        // Trigger confirmation for system disk offline
-                                        self.pending_offline_disk = Some(disk.disk_number);
-                                    } else {
-                                        self.start_disk_operation(disk.disk_number, disk.is_online);
+                                // Avoid "Disk 0: Disk 0" redundancy
+                                let model_display = if disk.model == format!("Disk {}", disk.disk_number) {
+                                    disk.model.clone()
+                                } else {
+                                    format!("Disk {}: {}", disk.disk_number, disk.model)
+                                };
+                                let info_text = egui::RichText::new(format!(
+                                    "{} - Size: {:.2} GB",
+                                    model_display,
+                                    disk.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+                                ));
+                                let info_text = if disk.is_system_disk {
+                                    info_text.color(egui::Color32::from_rgb(255, 165, 0)).strong()
+                                } else {
+                                    info_text
+                                };
+                                ui.label(info_text);
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let button_label = if disk.is_online { "Set Offline" } else { "Set Online" };
+                                    if ui.button(button_label).clicked() {
+                                        if disk.is_online && disk.is_system_disk {
+                                            self.pending_offline_disk = Some(disk.disk_number);
+                                        } else {
+                                            self.start_disk_operation(disk.disk_number, disk.is_online);
+                                        }
                                     }
-                                }
+                                });
                             });
+                            // Show partitions
+                            if !disk.partitions.is_empty() {
+                                ui.indent("partitions", |ui| {
+                                    for part in &disk.partitions {
+                                        ui.label(format!(
+                                            "Partition {}: {:.2} GB ({})",
+                                            part.partition_number,
+                                            part.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                                            part.drive_letter
+                                        ));
+                                    }
+                                });
+                            }
                         });
-                        
-                        // Show partitions
-                        if !disk.partitions.is_empty() {
-                            ui.indent("partitions", |ui| {
-                                for part in &disk.partitions {
-                                    ui.label(format!(
-                                        "Partition {}: {:.2} GB ({})",
-                                        part.partition_number,
-                                        part.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
-                                        part.drive_letter
-                                    ));
-                                }
-                            });
-                        }
-                    });
                     ui.add_space(5.0);
                 }
             });
-            
             ui.separator();
             if ui.button("Refresh List").clicked() {
-                self.disks.clear();
+                self.refresh_disks();
             }
         });
     }
 }
 
 impl DiskApp {
+    fn refresh_disks(&mut self) {
+        self.is_loading_disks = true;
+        self.error = None;
+        let (tx, rx) = channel();
+        self.disk_load_receiver = Some(rx);
+        thread::spawn(move || {
+            let result = enumerate_disks().map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        });
+    }
+
     fn start_disk_operation(&mut self, disk_number: u32, is_online: bool) {
         self.processing_disk = Some(disk_number);
         let (tx, rx) = channel();
         self.op_receiver = Some(rx);
-
         thread::spawn(move || {
             let result = if is_online {
                 set_disk_offline(disk_number)

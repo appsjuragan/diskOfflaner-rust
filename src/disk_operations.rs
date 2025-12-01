@@ -254,11 +254,14 @@ fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     }
 
     let output = child.wait_with_output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
-    if !output.status.success() {
+    if !output.status.success() || stdout.contains("Virtual Disk Service error") || stdout.contains("The disk is currently in use") {
         return Err(anyhow::anyhow!(
-            "Diskpart failed: {}",
-            String::from_utf8_lossy(&output.stderr)
+            "Diskpart failed: {}\n{}",
+            stdout,
+            stderr
         ));
     }
 
