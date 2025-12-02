@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::ffi::OsStr;
 use std::iter::once;
+use std::env;
 use std::mem;
 use std::os::windows::ffi::OsStrExt;
 use std::io::Write;
@@ -53,8 +54,18 @@ pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
         // Get disk geometry to determine size
         let size_bytes = get_disk_size(handle)?;
         let is_online = check_disk_online(disk_number);
-        let is_system_disk = disk_number == 0; // Simple heuristic
         let partitions = get_partitions(disk_number)?;
+        // Determine system drive letter (e.g., "C")
+        let system_drive_letter = std::env::var("SystemDrive")
+            .ok()
+            .and_then(|s| s.chars().next())
+            .map(|c| c.to_ascii_uppercase().to_string());
+        let is_system_disk = if let Some(sys) = system_drive_letter {
+            partitions.iter().any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
+        } else {
+            // Fallback heuristic: first disk (0) is system disk
+            disk_number == 0
+        };
 
         CloseHandle(handle);
 
