@@ -1,18 +1,17 @@
 use anyhow::Result;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::iter::once;
-use std::env;
 use std::mem;
 use std::os::windows::ffi::OsStrExt;
-use std::io::Write;
 use std::process::{Command, Stdio};
 use winapi::um::fileapi::CreateFileW;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-use winapi::um::winioctl::{
-    DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, 
-    IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, VOLUME_DISK_EXTENTS,
-};
 use winapi::um::ioapiset::DeviceIoControl;
+use winapi::um::winioctl::{
+    DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+    VOLUME_DISK_EXTENTS,
+};
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ};
 
 use crate::structs::{DiskInfo, PartitionInfo};
@@ -61,7 +60,9 @@ pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
             .and_then(|s| s.chars().next())
             .map(|c| c.to_ascii_uppercase().to_string());
         let is_system_disk = if let Some(sys) = system_drive_letter {
-            partitions.iter().any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
+            partitions
+                .iter()
+                .any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
         } else {
             // Fallback heuristic: first disk (0) is system disk
             disk_number == 0
@@ -107,7 +108,7 @@ fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
 
 fn check_disk_online(disk_number: u32) -> bool {
     // Use diskpart to check actual online/offline status
-    let script = format!("list disk\nexit\n");
+    let script = "list disk\nexit\n".to_string();
 
     let output = match Command::new("diskpart")
         .creation_flags(CREATE_NO_WINDOW)
@@ -129,7 +130,7 @@ fn check_disk_online(disk_number: u32) -> bool {
     };
 
     let output_str = String::from_utf8_lossy(&output.stdout);
-    
+
     // Parse diskpart output
     // Format: "  Disk ###  Status         Size     Free     Dyn  Gpt"
     // Example: "  Disk 2    Offline        11176 GB      0 B        *"
@@ -159,7 +160,7 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     for letter in b'A'..=b'Z' {
         let drive_letter = (letter as char).to_string();
         let volume_path = format!("\\\\.\\{}:", drive_letter);
-        
+
         if let Ok(partition) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
             partitions.push(partition);
         }
@@ -252,10 +253,7 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
-    let script = format!(
-        "select disk {}\n{} disk\nexit\n",
-        disk_number, command
-    );
+    let script = format!("select disk {}\n{} disk\nexit\n", disk_number, command);
 
     let mut child = Command::new("diskpart")
         .creation_flags(CREATE_NO_WINDOW)
@@ -272,12 +270,11 @@ fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    if !output.status.success() || stdout.contains("Virtual Disk Service error") || stdout.contains("The disk is currently in use") {
-        return Err(anyhow::anyhow!(
-            "Diskpart failed: {}\n{}",
-            stdout,
-            stderr
-        ));
+    if !output.status.success()
+        || stdout.contains("Virtual Disk Service error")
+        || stdout.contains("The disk is currently in use")
+    {
+        return Err(anyhow::anyhow!("Diskpart failed: {}\n{}", stdout, stderr));
     }
 
     Ok(())

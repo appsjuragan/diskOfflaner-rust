@@ -8,11 +8,10 @@ use std::mem;
 use std::ptr;
 
 mod disk_operations;
-mod structs;
 mod gui;
+mod structs;
 
-use disk_operations::{enumerate_disks, set_disk_online, set_disk_offline};
-
+use disk_operations::{enumerate_disks, set_disk_offline, set_disk_online};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -28,11 +27,16 @@ fn main() -> Result<()> {
 
     // Check for admin privileges
     if !is_elevated() {
-        // If we attached console, this will print there. If not (GUI mode), it won't be seen, 
+        // If we attached console, this will print there. If not (GUI mode), it won't be seen,
         // but GUI mode usually requests elevation via manifest or user action.
         // For GUI app, we might want to show a message box if not elevated, but the current logic just exits.
         // Given the user runs as admin, this is fine.
-        eprintln!("{}", "ERROR: This program requires administrative privileges.".red().bold());
+        eprintln!(
+            "{}",
+            "ERROR: This program requires administrative privileges."
+                .red()
+                .bold()
+        );
         eprintln!("Please run as administrator.");
         std::process::exit(1);
     }
@@ -49,8 +53,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-
-
 fn toggle_disk(disk_number: u32) -> Result<()> {
     println!("Checking disk {} status...", disk_number);
 
@@ -64,7 +66,9 @@ fn toggle_disk(disk_number: u32) -> Result<()> {
     if disk.is_system_disk {
         println!(
             "{}",
-            "WARNING: This appears to be a system or boot disk!".red().bold()
+            "WARNING: This appears to be a system or boot disk!"
+                .red()
+                .bold()
         );
         print!("Are you sure you want to continue? (yes/no): ");
         io::stdout().flush()?;
