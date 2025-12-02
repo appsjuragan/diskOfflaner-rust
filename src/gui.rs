@@ -7,9 +7,11 @@ use crate::disk_operations::{set_disk_online, set_disk_offline};
 use crate::structs::DiskInfo;
 
 pub fn run_gui() -> Result<()> {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    options.viewport.inner_size = Some(egui::vec2(450.0, 600.0));
+    
     eframe::run_native(
-        "DiskOfflaner v1.0.0",
+        &format!("DiskOfflaner v{}", env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|cc| {
             // Default to Dark Mode
@@ -155,7 +157,7 @@ impl eframe::App for DiskApp {
                         if is_dark {
                             // Switch to Light Mode with 95% Grey
                             let mut visuals = egui::Visuals::light();
-                            let grey_95 = egui::Color32::from_gray(242);
+                            let grey_95 = egui::Color32::from_gray(211);
                             visuals.panel_fill = grey_95;
                             visuals.window_fill = grey_95;
                             visuals.widgets.noninteractive.bg_fill = grey_95;
@@ -178,8 +180,6 @@ impl eframe::App for DiskApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.separator();
-
             // Disable interaction if processing
             ui.set_enabled(self.processing_disk.is_none());
 
@@ -222,7 +222,12 @@ impl eframe::App for DiskApp {
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
                                     let status = if disk.is_online { "Online" } else { "Offline" };
-                                    let status_color = if disk.is_online { egui::Color32::GREEN } else { egui::Color32::RED };
+                                    let is_dark = ui.visuals().dark_mode;
+                                    let status_color = if disk.is_online {
+                                        if is_dark { egui::Color32::GREEN } else { egui::Color32::from_rgb(0, 128, 128) } // Teal
+                                    } else {
+                                        if is_dark { egui::Color32::RED } else { egui::Color32::from_rgb(128, 0, 0) } // Maroon
+                                    };
                                     
                                     // Colored HDD Icon
                                     ui.label(egui::RichText::new("🖴").size(24.0).color(status_color));
