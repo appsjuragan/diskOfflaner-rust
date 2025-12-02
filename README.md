@@ -1,8 +1,8 @@
 # 💾 DiskOfflaner
 
-**Take control of your Windows disk drives with confidence and ease.**
+**Take control of your disk drives with confidence and ease.**
 
-DiskOfflaner is a powerful yet intuitive desktop application that lets you manage the online/offline status of your physical disk drives on Windows. Whether you're a system administrator, IT professional, or power user who needs to safely disconnect drives without physically unplugging them, DiskOfflaner makes it simple and safe.
+DiskOfflaner is a powerful yet intuitive desktop application that lets you manage the online/offline status of your physical disk drives on **Windows** and **Linux**. Whether you're a system administrator, IT professional, or power user who needs to safely disconnect drives without physically unplugging them, DiskOfflaner makes it simple and safe.
 
 ## ✨ Why Use DiskOfflaner?
 
@@ -14,7 +14,7 @@ Ever needed to temporarily disable a disk drive without physically removing it? 
 See all your physical disks at a glance with their models, sizes, and partition information beautifully displayed in an easy-to-read interface.
 
 ### 🚦 **Instant Status Visibility**
-Color-coded indicators (Green for Online, Red for Offline) make it immediately obvious which drives are active and which are disabled.
+Color-coded indicators (Green/Teal for Online, Red/Maroon for Offline) make it immediately obvious which drives are active and which are disabled.
 
 ### 🔄 **Smart Refresh System**
 - **Always Visible**: Your disk list stays on screen during refreshes - no annoying blank screens
@@ -36,16 +36,28 @@ Toggle any disk between Online and Offline states with a single button click. No
 
 ## 💻 System Requirements
 
+### Windows
 - **Windows 10** or **Windows 11**
 - **Administrator privileges** (required for disk management operations)
 
+### Linux
+- **Modern Linux Distribution** (Ubuntu, Fedora, Arch, etc.)
+- **Root/Sudo privileges** (required for disk management operations)
+- `lsblk` utility (usually pre-installed)
+
 ## 🚀 Getting Started
 
-### Quick Start
+### Windows Quick Start
 
 1. **Download** the latest `diskofflaner.exe` from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
 2. **Right-click** the executable and select **"Run as administrator"**
 3. **You're ready!** The application will automatically scan and display all your disks
+
+### Linux Quick Start
+
+1. **Download** the Linux binary from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
+2. **Make it executable**: `chmod +x diskofflaner`
+3. **Run with sudo**: `sudo ./diskofflaner`
 
 ### How to Use
 
@@ -69,7 +81,8 @@ cd diskOfflaner-rust
 cargo build --release
 ```
 
-Your executable will be ready at `target/release/diskofflaner.exe`
+- **Windows**: Executable at `target/release/diskofflaner.exe`
+- **Linux**: Binary at `target/release/diskofflaner`
 
 ## 🤝 Who Should Use This?
 
