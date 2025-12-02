@@ -29,8 +29,8 @@ pub fn run_gui() -> Result<()> {
 struct DiskApp {
     disks: Vec<DiskInfo>,
     error: Option<String>,
-    pending_offline_disk: Option<u32>,
-    processing_disk: Option<u32>,
+    pending_offline_disk: Option<String>,
+    processing_disk: Option<String>,
     op_receiver: Option<Receiver<Result<(), String>>>,
     // Async disk loading
     is_loading_disks: bool,
@@ -95,7 +95,7 @@ impl eframe::App for DiskApp {
         }
 
         // Confirmation Dialog
-        if let Some(disk_num) = self.pending_offline_disk {
+        if let Some(disk_id) = self.pending_offline_disk.clone() {
             egui::Window::new("⚠️ Critical Warning")
                 .collapsible(false)
                 .resizable(false)
@@ -111,8 +111,9 @@ impl eframe::App for DiskApp {
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if ui.button("Yes, Set Offline").clicked() {
+                            let id = disk_id.clone();
                             self.pending_offline_disk = None;
-                            self.start_disk_operation(disk_num, true); // true = currently online, so set offline
+                            self.start_disk_operation(id, true); // true = currently online, so set offline
                         }
                         if ui.button("Cancel").clicked() {
                             self.pending_offline_disk = None;
@@ -237,12 +238,11 @@ impl eframe::App for DiskApp {
                                     }
                                     ui.add_space(5.0);
                                     // Avoid "Disk 0: Disk 0" redundancy
-                                    let model_display =
-                                        if disk.model == format!("Disk {}", disk.disk_number) {
-                                            disk.model.clone()
-                                        } else {
-                                            format!("Disk {}: {}", disk.disk_number, disk.model)
-                                        };
+                                    let model_display = if disk.model == format!("Disk {}", disk.id) {
+                                        disk.model.clone()
+                                    } else {
+                                        format!("Disk {}: {}", disk.id, disk.model)
+                                    };
                                     let info_text = egui::RichText::new(format!(
                                         "{} - Size: {:.2} GB",
                                         model_display,
@@ -267,10 +267,10 @@ impl eframe::App for DiskApp {
                                             if ui.button(button_label).clicked() {
                                                 if disk.is_online && disk.is_system_disk {
                                                     self.pending_offline_disk =
-                                                        Some(disk.disk_number);
+                                                        Some(disk.id.clone());
                                                 } else {
                                                     self.start_disk_operation(
-                                                        disk.disk_number,
+                                                        disk.id.clone(),
                                                         disk.is_online,
                                                     );
                                                 }
@@ -312,15 +312,15 @@ impl DiskApp {
         });
     }
 
-    fn start_disk_operation(&mut self, disk_number: u32, is_online: bool) {
-        self.processing_disk = Some(disk_number);
+    fn start_disk_operation(&mut self, disk_id: String, is_online: bool) {
+        self.processing_disk = Some(disk_id.clone());
         let (tx, rx) = channel();
         self.op_receiver = Some(rx);
         thread::spawn(move || {
             let result = if is_online {
-                set_disk_offline(disk_number)
+                set_disk_offline(disk_id)
             } else {
-                set_disk_online(disk_number)
+                set_disk_online(disk_id)
             };
             let _ = tx.send(result.map_err(|e| e.to_string()));
         });

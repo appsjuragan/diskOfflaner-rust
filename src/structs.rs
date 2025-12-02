@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct DiskInfo {
-    pub disk_number: u32,
+    pub id: String,
     pub model: String,
     pub size_bytes: u64,
     pub is_online: bool,
