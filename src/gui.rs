@@ -259,17 +259,17 @@ impl eframe::App for DiskApp {
 
                                     // 1. Icon (Fixed Width 30)
                                     ui.allocate_ui(egui::vec2(30.0, ui.available_height()), |ui| {
-                                        let icon_path = match disk.disk_type {
-                                            DiskType::HDD => "file://assets/hdd.svg",
-                                            DiskType::SSD => "file://assets/ssd.svg",
-                                            DiskType::NVMe => "file://assets/nvme.svg",
-                                            DiskType::ExternalHDD => "file://assets/external_hdd.svg",
-                                            DiskType::USBFlash => "file://assets/usb.svg",
-                                            _ => "file://assets/hdd.svg",
+                                        let icon = match disk.disk_type {
+                                            DiskType::HDD => egui::include_image!("../assets/hdd.svg"),
+                                            DiskType::SSD => egui::include_image!("../assets/ssd.svg"),
+                                            DiskType::NVMe => egui::include_image!("../assets/nvme.svg"),
+                                            DiskType::ExternalHDD => egui::include_image!("../assets/external_hdd.svg"),
+                                            DiskType::USBFlash => egui::include_image!("../assets/usb.svg"),
+                                            _ => egui::include_image!("../assets/hdd.svg"),
                                         };
                                         
                                         ui.add(
-                                            egui::Image::new(icon_path)
+                                            egui::Image::new(icon)
                                                 .fit_to_exact_size(egui::vec2(24.0, 24.0))
                                                 .tint(status_color)
                                         );
