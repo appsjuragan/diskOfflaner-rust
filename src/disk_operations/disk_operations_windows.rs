@@ -10,15 +10,13 @@ use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 // src/disk_operations/disk_operations_windows.rs
 use winapi::um::ioapiset::DeviceIoControl;
 use winapi::um::winioctl::{
-    DISK_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
-    VOLUME_DISK_EXTENTS, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, DRIVE_LAYOUT_INFORMATION_EX,
+    DISK_GEOMETRY_EX, DRIVE_LAYOUT_INFORMATION_EX, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+    IOCTL_DISK_GET_DRIVE_LAYOUT_EX, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, VOLUME_DISK_EXTENTS,
 };
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ};
 // Removed unused PARTITION_INFORMATION_EX import
 
-
-
-use crate::structs::{DiskInfo, PartitionInfo, DiskType};
+use crate::structs::{DiskInfo, DiskType, PartitionInfo};
 
 const OPEN_EXISTING: u32 = 3;
 
@@ -55,7 +53,6 @@ struct STORAGE_DEVICE_DESCRIPTOR {
 
 const BUS_TYPE_USB: u32 = 7;
 const BUS_TYPE_NVME: u32 = 17;
-
 
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
@@ -196,8 +193,6 @@ fn check_disk_online(disk_number: u32) -> bool {
     true // Default to online if not found
 }
 
-
-
 // Helper to get all partitions using Drive Layout
 fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     let path = format!("\\\\.\\PhysicalDrive{}", disk_number);
@@ -219,7 +214,7 @@ fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
         }
 
         // Allocate a large buffer for layout info (supports many partitions)
-        let mut buffer = vec![0u8; 4096]; 
+        let mut buffer = vec![0u8; 4096];
         let mut bytes_returned = 0u32;
 
         let success = DeviceIoControl(
@@ -241,16 +236,16 @@ fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
 
         let layout = &*(buffer.as_ptr() as *const DRIVE_LAYOUT_INFORMATION_EX);
         let mut partitions = Vec::new();
-        
+
         // Iterate over partitions
         // The PARTITION_INFORMATION_EX array is at the end of the struct.
         // We need to handle the variable length array manually or use the slice if winapi supports it.
         // winapi DRIVE_LAYOUT_INFORMATION_EX has PartitionEntry: [PARTITION_INFORMATION_EX; 1]
-        
+
         let entry_ptr = layout.PartitionEntry.as_ptr();
         for i in 0..layout.PartitionCount {
             let entry = &*entry_ptr.offset(i as isize);
-            
+
             // Filter out empty/unusable partitions
             // PartitionStyle: 0 = MBR, 1 = GPT, 2 = RAW
             // We generally want partitions with non-zero length
@@ -258,20 +253,20 @@ fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
             if length > 0 {
                 let offset = *entry.StartingOffset.QuadPart() as u64;
                 let number = entry.PartitionNumber;
-                
+
                 // For MBR, check RecognizedPartition (bool) or PartitionType
                 // For GPT, check PartitionType (GUID)
                 // Simplified: just take it if length > 0
-                
+
                 partitions.push(PartitionInfo {
                     partition_number: number,
                     size_bytes: length,
-                    drive_letter: String::new(), // Filled later
+                    drive_letter: String::new(),           // Filled later
                     partition_id: format!("{:X}", offset), // Use Offset as ID for matching
                 });
             }
         }
-        
+
         Ok(partitions)
     }
 }
@@ -279,7 +274,7 @@ fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
 fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     // 1. Get all partitions from layout
     let mut partitions = get_partitions_layout(disk_number).unwrap_or_default();
-    
+
     // 2. Get mounted volumes (Drive Letters) on this disk
     let mut mounted_map = std::collections::HashMap::new();
     for letter in b'A'..=b'Z' {
@@ -301,10 +296,10 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
             }
         }
     }
-    
+
     // If layout failed (empty partitions), fallback to old method (only mounted)
     if partitions.is_empty() {
-         for letter in b'A'..=b'Z' {
+        for letter in b'A'..=b'Z' {
             let drive_letter = (letter as char).to_string();
             let volume_path = format!("\\\\.\\{}:", drive_letter);
             if let Ok(partition) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
@@ -378,14 +373,16 @@ fn get_partition_on_disk(
     }
 }
 
-
 pub fn unmount_partition(drive_letter: String) -> Result<()> {
     let script = format!("select volume {}\nremove\nexit\n", drive_letter);
     run_diskpart_script(&script)
 }
 
 pub fn mount_partition(disk_number: u32, partition_number: u32) -> Result<()> {
-    let script = format!("select disk {}\nselect partition {}\nassign\nexit\n", disk_number, partition_number);
+    let script = format!(
+        "select disk {}\nselect partition {}\nassign\nexit\n",
+        disk_number, partition_number
+    );
     run_diskpart_script(&script)
 }
 
@@ -409,7 +406,6 @@ fn run_diskpart_script(script: &str) -> Result<()> {
     }
     Ok(())
 }
-
 
 pub fn set_disk_online(disk_id: String) -> Result<()> {
     let disk_number = disk_id.parse::<u32>()?;
@@ -485,11 +481,11 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
     // TODO: Implement SSD vs HDD detection via SeekPenalty or RPM if needed.
     // For now, default to HDD unless we find a better way to detect SSD.
     // Many modern SATA SSDs are hard to distinguish without more complex queries (TRIM check).
-    
+
     // Let's try a simple TRIM check if possible, or just default to HDD.
     // Given the user specifically asked for NVMe fix, the BusType check above covers that.
     // If they want SATA SSD detection, we can add it later.
-    
+
     DiskType::HDD
 }
 

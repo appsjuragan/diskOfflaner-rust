@@ -1,8 +1,8 @@
 // src/disk_operations/disk_operations_linux.rs
+use crate::structs::{DiskInfo, DiskType, PartitionInfo};
 use anyhow::Result;
-use std::process::Command;
-use crate::structs::{DiskInfo, PartitionInfo, DiskType};
 use serde::Deserialize;
+use std::process::Command;
 
 #[derive(Debug, Deserialize)]
 struct LsblkOutput {
@@ -18,7 +18,7 @@ struct BlockDevice {
     mountpoint: Option<String>,
     model: Option<String>,
     state: Option<String>,
-    rm: Option<String>, // Removable flag
+    rm: Option<String>,   // Removable flag
     rota: Option<String>, // Rotational (1 = HDD, 0 = SSD)
     tran: Option<String>, // Transport type (nvme, usb, sata, etc.)
     children: Option<Vec<BlockDevice>>,
@@ -51,7 +51,7 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
         let id = device.name.clone();
         let model = device.model.unwrap_or_else(|| format!("Disk {}", id));
         let size_bytes = device.size.unwrap_or(0);
-        
+
         // Check state. If state is "offline", then it's offline.
         let is_online = device.state.as_deref() != Some("offline");
 
@@ -154,7 +154,7 @@ pub fn eject_disk(disk_id: String) -> Result<()> {
         .arg("-b")
         .arg(format!("/dev/{}", disk_id))
         .output()?;
-    
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("Failed to eject disk: {}", stderr));
@@ -166,13 +166,13 @@ pub fn mount_partition(disk_number: u32, partition_number: u32) -> Result<()> {
     // Convert disk number to device name (0=sda, 1=sdb, etc.)
     let disk_letter = (b'a' + disk_number as u8) as char;
     let device_path = format!("/dev/sd{}{}", disk_letter, partition_number);
-    
+
     let output = Command::new("udisksctl")
         .arg("mount")
         .arg("-b")
         .arg(&device_path)
         .output()?;
-    
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("Failed to mount partition: {}", stderr));
@@ -189,19 +189,22 @@ pub fn unmount_partition(mount_point: String) -> Result<()> {
         .arg("SOURCE")
         .arg(&mount_point)
         .output()?;
-    
+
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Cannot find device for mount point: {}", mount_point));
+        return Err(anyhow::anyhow!(
+            "Cannot find device for mount point: {}",
+            mount_point
+        ));
     }
-    
+
     let device = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    
+
     let output = Command::new("udisksctl")
         .arg("unmount")
         .arg("-b")
         .arg(&device)
         .output()?;
-    
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("Failed to unmount partition: {}", stderr));

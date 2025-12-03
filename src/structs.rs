@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum DiskType {
     HDD,
     SSD,
