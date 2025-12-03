@@ -1,3 +1,14 @@
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+pub enum DiskType {
+    HDD,
+    SSD,
+    NVMe,
+    ExternalHDD,
+    USBFlash,
+    Unknown,
+}
+
 #[derive(Debug, Clone)]
 pub struct DiskInfo {
     pub id: String,
@@ -6,6 +17,7 @@ pub struct DiskInfo {
     pub is_online: bool,
     pub is_system_disk: bool,
     pub partitions: Vec<PartitionInfo>,
+    pub disk_type: DiskType,
 }
 
 #[derive(Debug, Clone)]

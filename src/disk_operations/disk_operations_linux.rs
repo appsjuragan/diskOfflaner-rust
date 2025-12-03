@@ -1,6 +1,7 @@
+// src/disk_operations/disk_operations_linux.rs
 use anyhow::Result;
 use std::process::Command;
-use crate::structs::{DiskInfo, PartitionInfo};
+use crate::structs::{DiskInfo, PartitionInfo, DiskType};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -11,22 +12,25 @@ struct LsblkOutput {
 #[derive(Debug, Deserialize)]
 struct BlockDevice {
     name: String,
-    size: Option<u64>, // lsblk -b gives bytes, but sometimes it might be missing or string? JSON usually handles numbers. Option just in case.
+    size: Option<u64>, // lsblk -b gives bytes
     #[serde(rename = "type")]
     device_type: Option<String>,
     mountpoint: Option<String>,
     model: Option<String>,
     state: Option<String>,
+    rm: Option<String>, // Removable flag
+    rota: Option<String>, // Rotational (1 = HDD, 0 = SSD)
+    tran: Option<String>, // Transport type (nvme, usb, sata, etc.)
     children: Option<Vec<BlockDevice>>,
 }
 
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
-    // lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE
+    // lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE,RM,ROTA,TRAN
     let output = Command::new("lsblk")
         .arg("-J") // JSON output
         .arg("-b") // Bytes
         .arg("-o")
-        .arg("NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE")
+        .arg("NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE,RM,ROTA,TRAN")
         .output()?;
 
     if !output.status.success() {
@@ -45,11 +49,14 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
         }
 
         let id = device.name.clone();
-        let model = device.model.unwrap_or_else(|| "Unknown".to_string());
+        let model = device.model.unwrap_or_else(|| format!("Disk {}", id));
         let size_bytes = device.size.unwrap_or(0);
         
         // Check state. If state is "offline", then it's offline.
         let is_online = device.state.as_deref() != Some("offline");
+
+        // Determine disk type based on transport and properties
+        let disk_type = get_disk_type_linux(&device);
 
         let mut partitions = Vec::new();
         let mut is_system_disk = false;
@@ -79,10 +86,41 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
             is_online,
             is_system_disk,
             partitions,
+            disk_type,
         });
     }
 
     Ok(disks)
+}
+
+fn get_disk_type_linux(device: &BlockDevice) -> DiskType {
+    // Check transport type first
+    if let Some(tran) = &device.tran {
+        match tran.as_str() {
+            "nvme" => return DiskType::NVMe,
+            "usb" => {
+                // Check if removable
+                if device.rm.as_deref() == Some("1") {
+                    return DiskType::USBFlash;
+                } else {
+                    return DiskType::ExternalHDD;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Check rotational flag (SSD vs HDD)
+    if let Some(rota) = &device.rota {
+        if rota == "0" {
+            return DiskType::SSD;
+        } else if rota == "1" {
+            return DiskType::HDD;
+        }
+    }
+
+    // Default to HDD
+    DiskType::HDD
 }
 
 pub fn set_disk_online(disk_id: String) -> Result<()> {
@@ -104,6 +142,69 @@ pub fn set_disk_offline(disk_id: String) -> Result<()> {
         std::fs::write(path, "offline")?;
     } else {
         return Err(anyhow::anyhow!("Cannot change state for {}", disk_id));
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn eject_disk(disk_id: String) -> Result<()> {
+    // For removable drives, use udisksctl to power off
+    let output = Command::new("udisksctl")
+        .arg("power-off")
+        .arg("-b")
+        .arg(format!("/dev/{}", disk_id))
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to eject disk: {}", stderr));
+    }
+    Ok(())
+}
+
+pub fn mount_partition(disk_number: u32, partition_number: u32) -> Result<()> {
+    // Convert disk number to device name (0=sda, 1=sdb, etc.)
+    let disk_letter = (b'a' + disk_number as u8) as char;
+    let device_path = format!("/dev/sd{}{}", disk_letter, partition_number);
+    
+    let output = Command::new("udisksctl")
+        .arg("mount")
+        .arg("-b")
+        .arg(&device_path)
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to mount partition: {}", stderr));
+    }
+    Ok(())
+}
+
+pub fn unmount_partition(mount_point: String) -> Result<()> {
+    // mount_point on Linux is the actual mount path (e.g., /media/user/USB)
+    // We need to find the device from the mount point
+    let output = Command::new("findmnt")
+        .arg("-n")
+        .arg("-o")
+        .arg("SOURCE")
+        .arg(&mount_point)
+        .output()?;
+    
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Cannot find device for mount point: {}", mount_point));
+    }
+    
+    let device = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    
+    let output = Command::new("udisksctl")
+        .arg("unmount")
+        .arg("-b")
+        .arg(&device)
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to unmount partition: {}", stderr));
     }
     Ok(())
 }
