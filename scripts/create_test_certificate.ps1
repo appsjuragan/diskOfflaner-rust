@@ -23,6 +23,7 @@ Write-Host "  Name: $CertName" -ForegroundColor $InfoColor
 Write-Host "  Publisher: $Publisher" -ForegroundColor $InfoColor
 Write-Host "  Valid for: $ValidYears years`n" -ForegroundColor $InfoColor
 
+# Auto-confirm for non-interactive runs if needed, but here we ask
 $response = Read-Host "Do you want to continue? (yes/no)"
 if ($response -ne "yes") {
     Write-Host "Cancelled" -ForegroundColor $WarningColor
@@ -33,27 +34,18 @@ Write-Host "`nCreating certificate..." -ForegroundColor $InfoColor
 
 try {
     # Create the certificate
-    $cert = New-SelfSignedCertificate `
-        -Type CodeSigningCert `
-        -Subject $Publisher `
-        -FriendlyName $CertName `
-        -CertStoreLocation "Cert:\CurrentUser\My" `
-        -NotAfter (Get-Date).AddYears($ValidYears) `
-        -KeyUsage DigitalSignature `
-        -KeyAlgorithm RSA `
-        -KeyLength 2048 `
-        -HashAlgorithm SHA256
+    $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $Publisher -FriendlyName $CertName -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears($ValidYears) -KeyUsage DigitalSignature -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256
 
-    Write-Host "✓ Certificate created successfully!" -ForegroundColor $SuccessColor
+    Write-Host "Certificate created successfully!" -ForegroundColor $SuccessColor
     Write-Host "`nCertificate Details:" -ForegroundColor $InfoColor
     Write-Host "  Subject: $($cert.Subject)" -ForegroundColor $InfoColor
     Write-Host "  Thumbprint: $($cert.Thumbprint)" -ForegroundColor $InfoColor
     Write-Host "  Valid: $($cert.NotBefore) to $($cert.NotAfter)" -ForegroundColor $InfoColor
     
     # Export certificate to file (without private key, for distribution)
-    $certPath = ".\DiskOfflaner_TestCert.cer"
+    $certPath = "DiskOfflaner_TestCert.cer"
     Export-Certificate -Cert $cert -FilePath $certPath | Out-Null
-    Write-Host "`n✓ Certificate exported to: $certPath" -ForegroundColor $SuccessColor
+    Write-Host "`nCertificate exported to: $certPath" -ForegroundColor $SuccessColor
     
     # Trust the certificate (required for local testing)
     Write-Host "`nInstalling certificate to Trusted Root..." -ForegroundColor $InfoColor
@@ -64,7 +56,7 @@ try {
     $store.Add($cert)
     $store.Close()
     
-    Write-Host "✓ Certificate installed to Trusted Root" -ForegroundColor $SuccessColor
+    Write-Host "Certificate installed to Trusted Root" -ForegroundColor $SuccessColor
     
     Write-Host "`n=== SUCCESS ===" -ForegroundColor $SuccessColor
     Write-Host "Test certificate created and installed!`n" -ForegroundColor $SuccessColor
@@ -76,13 +68,14 @@ try {
     Write-Host "   .\scripts\sign_release.ps1" -ForegroundColor $InfoColor
     
     Write-Host "`nIMPORTANT NOTES:" -ForegroundColor $WarningColor
-    Write-Host "• This is a SELF-SIGNED certificate (not trusted by default)" -ForegroundColor $WarningColor
-    Write-Host "• Users will see security warnings unless they manually trust this cert" -ForegroundColor $WarningColor
-    Write-Host "• For production, purchase a certificate from DigiCert, Sectigo, etc." -ForegroundColor $WarningColor
-    Write-Host "• Certificate file: $certPath" -ForegroundColor $WarningColor
+    Write-Host "- This is a SELF-SIGNED certificate (not trusted by default)" -ForegroundColor $WarningColor
+    Write-Host "- Users will see security warnings unless they manually trust this cert" -ForegroundColor $WarningColor
+    Write-Host "- For production, purchase a certificate from DigiCert, Sectigo, etc." -ForegroundColor $WarningColor
+    Write-Host "- Certificate file: $certPath" -ForegroundColor $WarningColor
     Write-Host ""
     
-} catch {
+}
+catch {
     Write-Host "`nERROR: Failed to create certificate" -ForegroundColor $ErrorColor
     Write-Host $_.Exception.Message -ForegroundColor $ErrorColor
     exit 1
