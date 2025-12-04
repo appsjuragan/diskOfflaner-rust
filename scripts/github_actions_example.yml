@@ -1,0 +1,150 @@
+# GitHub Actions Workflow for Building and Signing Releases
+# This is an EXAMPLE workflow - adapt to your needs
+
+name: Release Build and Sign
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache target directory
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build release
+      run: cargo build --release --verbose
+
+    - name: Get version
+      id: version
+      run: |
+        $version = (Select-String -Path "Cargo.toml" -Pattern 'version = "(.+)"' | Select-Object -First 1).Matches.Groups[1].Value
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Building version: $version"
+
+    # Code Signing Step
+    # NOTE: You need to set up secrets in your GitHub repository:
+    # 1. CERTIFICATE_BASE64 - Your .pfx certificate encoded in base64
+    # 2. CERTIFICATE_PASSWORD - Password for the certificate
+    
+    - name: Import code signing certificate
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        # Decode certificate from base64
+        $certBytes = [System.Convert]::FromBase64String("${{ secrets.CERTIFICATE_BASE64 }}")
+        $certPath = Join-Path $env:TEMP "cert.pfx"
+        [IO.File]::WriteAllBytes($certPath, $certBytes)
+        
+        # Import certificate
+        $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String "${{ secrets.CERTIFICATE_PASSWORD }}" -AsPlainText -Force)
+        
+        # Store thumbprint for signing step
+        echo "CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+        
+        # Clean up
+        Remove-Item $certPath
+
+    - name: Sign executable
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        # Find signtool
+        $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" | 
+                    Where-Object { $_.FullName -like "*\x64\*" } | 
+                    Select-Object -First 1 -ExpandProperty FullName
+        
+        if (-not $signtool) {
+          Write-Error "signtool.exe not found"
+          exit 1
+        }
+        
+        Write-Host "Using signtool: $signtool"
+        
+        # Sign the executable
+        & $signtool sign `
+          /sha1 $env:CERT_THUMBPRINT `
+          /t http://timestamp.digicert.com `
+          /fd SHA256 `
+          /v `
+          .\target\release\diskofflaner.exe
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Signing failed"
+          exit $LASTEXITCODE
+        }
+        
+        # Verify signature
+        & $signtool verify /pa /v .\target\release\diskofflaner.exe
+
+    - name: Calculate checksums
+      run: |
+        $hash = Get-FileHash .\target\release\diskofflaner.exe -Algorithm SHA256
+        $hash.Hash | Out-File -FilePath .\target\release\diskofflaner.exe.sha256
+        Write-Host "SHA256: $($hash.Hash)"
+
+    - name: Create release archive
+      run: |
+        $version = "${{ steps.version.outputs.VERSION }}"
+        Compress-Archive -Path .\target\release\diskofflaner.exe -DestinationPath "diskofflaner-v$version-windows-x64.zip"
+        
+        # Also copy checksum
+        Copy-Item .\target\release\diskofflaner.exe.sha256 -Destination .
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: diskofflaner-windows
+        path: |
+          diskofflaner-*.zip
+          *.sha256
+
+    - name: Create GitHub Release
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          diskofflaner-*.zip
+          *.sha256
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload release asset
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        Write-Host "Release created with signed executable!"
+        Write-Host "Version: ${{ steps.version.outputs.VERSION }}"

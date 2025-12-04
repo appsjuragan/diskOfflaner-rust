@@ -272,7 +272,7 @@ impl eframe::App for DiskApp {
             let ext_hdd_count = self
                 .disks
                 .iter()
-                .filter(|d| matches!(d.disk_type, DiskType::ExternalHDD))
+                .filter(|d| matches!(d.disk_type, DiskType::ExtHDD))
                 .count();
             let usb_count = self
                 .disks
@@ -361,7 +361,7 @@ impl eframe::App for DiskApp {
                                             DiskType::NVMe => {
                                                 egui::include_image!("../assets/nvme.svg")
                                             }
-                                            DiskType::ExternalHDD => {
+                                            DiskType::ExtHDD => {
                                                 egui::include_image!("../assets/external_hdd.svg")
                                             }
                                             DiskType::USBFlash => {
@@ -409,7 +409,7 @@ impl eframe::App for DiskApp {
                                                     }
                                                 }
                                             } else {
-                                                // HDD and ExternalHDD: toggle online/offline
+                                                // HDD and ExtHDD: toggle online/offline
                                                 let button_label = if disk.is_online {
                                                     "Set Offline"
                                                 } else {
@@ -576,20 +576,13 @@ impl DiskApp {
         let (tx, rx) = channel();
         self.op_receiver = Some(rx);
 
-        let disk_num_res = disk_id.parse::<u32>();
-
         thread::spawn(move || {
-            let result = match disk_num_res {
-                Ok(disk_num) => {
-                    if is_mount {
-                        crate::disk_operations::mount_partition(disk_num, partition_number)
-                    } else if let Some(letter) = drive_letter {
-                        crate::disk_operations::unmount_partition(letter)
-                    } else {
-                        Err(anyhow::anyhow!("No drive letter to unmount"))
-                    }
-                }
-                Err(e) => Err(anyhow::anyhow!("Invalid disk ID: {}", e)),
+            let result = if is_mount {
+                crate::disk_operations::mount_partition(disk_id, partition_number)
+            } else if let Some(letter) = drive_letter {
+                crate::disk_operations::unmount_partition(letter)
+            } else {
+                Err(anyhow::anyhow!("No drive letter to unmount"))
             };
             let _ = tx.send(result.map_err(|e| e.to_string()));
         });

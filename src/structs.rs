@@ -5,7 +5,7 @@ pub enum DiskType {
     HDD,
     SSD,
     NVMe,
-    ExternalHDD,
+    ExtHDD,
     USBFlash,
     Unknown,
 }

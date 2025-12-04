@@ -103,7 +103,7 @@ fn get_disk_type_linux(device: &BlockDevice) -> DiskType {
                 if device.rm.as_deref() == Some("1") {
                     return DiskType::USBFlash;
                 } else {
-                    return DiskType::ExternalHDD;
+                    return DiskType::ExtHDD;
                 }
             }
             _ => {}
@@ -162,10 +162,15 @@ pub fn eject_disk(disk_id: String) -> Result<()> {
     Ok(())
 }
 
-pub fn mount_partition(disk_number: u32, partition_number: u32) -> Result<()> {
-    // Convert disk number to device name (0=sda, 1=sdb, etc.)
-    let disk_letter = (b'a' + disk_number as u8) as char;
-    let device_path = format!("/dev/sd{}{}", disk_letter, partition_number);
+pub fn mount_partition(disk_id: String, partition_number: u32) -> Result<()> {
+    // Construct device path based on disk ID
+    // standard: sda -> sda1
+    // nvme: nvme0n1 -> nvme0n1p1
+    let device_path = if disk_id.starts_with("nvme") {
+        format!("/dev/{}p{}", disk_id, partition_number)
+    } else {
+        format!("/dev/{}{}", disk_id, partition_number)
+    };
 
     let output = Command::new("udisksctl")
         .arg("mount")

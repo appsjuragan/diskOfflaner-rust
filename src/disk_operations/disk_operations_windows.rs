@@ -57,9 +57,12 @@ const BUS_TYPE_NVME: u32 = 17;
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
 
+    // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
+    let disk_status_map = check_all_disks_online();
+
     // Enumerate up to 32 physical disks
     for disk_num in 0..32 {
-        if let Ok(disk_info) = get_disk_info(disk_num) {
+        if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map) {
             disks.push(disk_info);
         }
     }
@@ -67,7 +70,85 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     Ok(disks)
 }
 
-pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
+
+
+fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
+    unsafe {
+        let mut geometry: DISK_GEOMETRY_EX = mem::zeroed();
+        let mut bytes_returned = 0u32;
+
+        let success = DeviceIoControl(
+            handle,
+            IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+            std::ptr::null_mut(),
+            0,
+            &mut geometry as *mut _ as *mut _,
+            mem::size_of::<DISK_GEOMETRY_EX>() as u32,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        );
+
+        if success != 0 {
+            Ok(*geometry.DiskSize.QuadPart() as u64)
+        } else {
+            // Fallback to default size
+            Ok(10 * 1024 * 1024 * 1024) // Default 10GB
+        }
+    }
+}
+
+// OPTIMIZED: Call diskpart ONCE for ALL disks and return a HashMap of statuses
+fn check_all_disks_online() -> std::collections::HashMap<u32, bool> {
+    let mut status_map = std::collections::HashMap::new();
+    
+    let script = "list disk\nexit\n".to_string();
+
+    let output = match Command::new("diskpart")
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(mut child) => {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(script.as_bytes());
+            }
+            match child.wait_with_output() {
+                Ok(out) => out,
+                Err(_) => return status_map, // Return empty on error
+            }
+        }
+        Err(_) => return status_map, // Return empty on error
+    };
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+
+    // Parse diskpart output
+    // Format: "  Disk ###  Status         Size     Free     Dyn  Gpt"
+    // Example: "  Disk 2    Offline        11176 GB      0 B        *"
+    for line in output_str.lines() {
+        let line = line.trim();
+        if line.starts_with("Disk") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                // parts[0] = "Disk", parts[1] = disk number, parts[2] = status
+                if let Ok(disk_num) = parts[1].parse::<u32>() {
+                    let status = parts[2].to_lowercase();
+                    status_map.insert(disk_num, status == "online");
+                }
+            }
+        }
+    }
+
+    status_map
+}
+
+// Modified version of get_disk_info that uses cached status
+fn get_disk_info_with_status(
+    disk_number: u32,
+    status_map: &std::collections::HashMap<u32, bool>,
+) -> Result<DiskInfo> {
     let path = format!("\\\\.\\PhysicalDrive{}", disk_number);
     let wide_path: Vec<u16> = OsStr::new(&path).encode_wide().chain(once(0)).collect();
 
@@ -88,8 +169,12 @@ pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
 
         // Get disk geometry to determine size
         let size_bytes = get_disk_size(handle)?;
-        let is_online = check_disk_online(disk_number);
+        
+        // Use cached online status (OPTIMIZATION: no diskpart call per disk)
+        let is_online = status_map.get(&disk_number).copied().unwrap_or(true);
+        
         let partitions = get_partitions(disk_number)?;
+        
         // Determine system drive letter (e.g., "C")
         let system_drive_letter = std::env::var("SystemDrive")
             .ok()
@@ -121,77 +206,7 @@ pub fn get_disk_info(disk_number: u32) -> Result<DiskInfo> {
     }
 }
 
-fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
-    unsafe {
-        let mut geometry: DISK_GEOMETRY_EX = mem::zeroed();
-        let mut bytes_returned = 0u32;
 
-        let success = DeviceIoControl(
-            handle,
-            IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
-            std::ptr::null_mut(),
-            0,
-            &mut geometry as *mut _ as *mut _,
-            mem::size_of::<DISK_GEOMETRY_EX>() as u32,
-            &mut bytes_returned,
-            std::ptr::null_mut(),
-        );
-
-        if success != 0 {
-            Ok(*geometry.DiskSize.QuadPart() as u64)
-        } else {
-            // Fallback to default size
-            Ok(10 * 1024 * 1024 * 1024) // Default 10GB
-        }
-    }
-}
-
-fn check_disk_online(disk_number: u32) -> bool {
-    // Use diskpart to check actual online/offline status
-    let script = "list disk\nexit\n".to_string();
-
-    let output = match Command::new("diskpart")
-        .creation_flags(CREATE_NO_WINDOW)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        Ok(mut child) => {
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(script.as_bytes());
-            }
-            match child.wait_with_output() {
-                Ok(out) => out,
-                Err(_) => return true, // Default to online if we can't check
-            }
-        }
-        Err(_) => return true, // Default to online if diskpart fails
-    };
-
-    let output_str = String::from_utf8_lossy(&output.stdout);
-
-    // Parse diskpart output
-    // Format: "  Disk ###  Status         Size     Free     Dyn  Gpt"
-    // Example: "  Disk 2    Offline        11176 GB      0 B        *"
-    for line in output_str.lines() {
-        let line = line.trim();
-        if line.starts_with("Disk") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                // parts[0] = "Disk", parts[1] = disk number, parts[2] = status
-                if let Ok(disk_num) = parts[1].parse::<u32>() {
-                    if disk_num == disk_number {
-                        let status = parts[2].to_lowercase();
-                        return status == "online";
-                    }
-                }
-            }
-        }
-    }
-
-    true // Default to online if not found
-}
 
 // Helper to get all partitions using Drive Layout
 fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
@@ -276,14 +291,23 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     let mut partitions = get_partitions_layout(disk_number).unwrap_or_default();
 
     // 2. Get mounted volumes (Drive Letters) on this disk
+    // OPTIMIZATION: Only check MOUNTED drives using GetLogicalDrives
     let mut mounted_map = std::collections::HashMap::new();
-    for letter in b'A'..=b'Z' {
-        let drive_letter = (letter as char).to_string();
-        let volume_path = format!("\\\\.\\{}:", drive_letter);
-        if let Ok(info) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
-            // info.partition_id holds the offset in Hex
-            if let Ok(offset) = u64::from_str_radix(&info.partition_id, 16) {
-                mounted_map.insert(offset, drive_letter);
+    
+    unsafe {
+        let drives_bitmask = winapi::um::fileapi::GetLogicalDrives();
+        
+        for i in 0..26 {
+            // Check if this drive letter is mounted
+            if (drives_bitmask & (1 << i)) != 0 {
+                let drive_letter = ((b'A' + i) as char).to_string();
+                let volume_path = format!("\\\\.\\{}:", drive_letter);
+                if let Ok(info) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
+                    // info.partition_id holds the offset in Hex
+                    if let Ok(offset) = u64::from_str_radix(&info.partition_id, 16) {
+                        mounted_map.insert(offset, drive_letter);
+                    }
+                }
             }
         }
     }
@@ -299,11 +323,17 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
 
     // If layout failed (empty partitions), fallback to old method (only mounted)
     if partitions.is_empty() {
-        for letter in b'A'..=b'Z' {
-            let drive_letter = (letter as char).to_string();
-            let volume_path = format!("\\\\.\\{}:", drive_letter);
-            if let Ok(partition) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
-                partitions.push(partition);
+        unsafe {
+            let drives_bitmask = winapi::um::fileapi::GetLogicalDrives();
+            
+            for i in 0..26 {
+                if (drives_bitmask & (1 << i)) != 0 {
+                    let drive_letter = ((b'A' + i) as char).to_string();
+                    let volume_path = format!("\\\\.\\{}:", drive_letter);
+                    if let Ok(partition) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
+                        partitions.push(partition);
+                    }
+                }
             }
         }
     }
@@ -378,7 +408,8 @@ pub fn unmount_partition(drive_letter: String) -> Result<()> {
     run_diskpart_script(&script)
 }
 
-pub fn mount_partition(disk_number: u32, partition_number: u32) -> Result<()> {
+pub fn mount_partition(disk_id: String, partition_number: u32) -> Result<()> {
+    let disk_number = disk_id.parse::<u32>()?;
     let script = format!(
         "select disk {}\nselect partition {}\nassign\nexit\n",
         disk_number, partition_number
@@ -470,7 +501,7 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
                     if descriptor.RemovableMedia == 1 {
                         return DiskType::USBFlash;
                     } else {
-                        return DiskType::ExternalHDD;
+                        return DiskType::ExtHDD;
                     }
                 }
                 _ => {}
