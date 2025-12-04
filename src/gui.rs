@@ -1,6 +1,6 @@
 use crate::disk_operations::enumerate_disks;
 use crate::disk_operations::{set_disk_offline, set_disk_online};
-use crate::structs::DiskInfo;
+use crate::structs::{DiskInfo, DiskType};
 use anyhow::Result;
 use eframe::egui;
 use std::sync::mpsc::{channel, Receiver};
@@ -15,7 +15,30 @@ pub fn run_gui() -> Result<()> {
         options,
         Box::new(|cc| {
             // Default to Dark Mode
-            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            // Default to Dark Mode
+            let mut visuals = egui::Visuals::dark();
+            visuals.extreme_bg_color = egui::Color32::from_gray(32); // Darker grey for inputs/scrollbar track
+            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_gray(32);
+
+            // Make scrollbar handle/buttons a subtle dark grey, not white
+            visuals.widgets.inactive.bg_fill = egui::Color32::from_gray(60);
+            visuals.widgets.inactive.fg_stroke =
+                egui::Stroke::new(1.0, egui::Color32::from_gray(220)); // Text color (Light Grey)
+            visuals.widgets.inactive.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT); // No border
+
+            visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(75);
+            visuals.widgets.hovered.fg_stroke =
+                egui::Stroke::new(1.0, egui::Color32::from_gray(240)); // Text color (Brighter)
+            visuals.widgets.hovered.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT); // No border
+
+            visuals.widgets.active.bg_fill = egui::Color32::from_gray(90);
+            visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE); // Text color (White)
+            visuals.widgets.active.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT); // No border
+
+            cc.egui_ctx.set_visuals(visuals);
+            // Install image loaders
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+
             let mut app = DiskApp::default();
             // Start initial load
             app.refresh_disks();
@@ -29,8 +52,8 @@ pub fn run_gui() -> Result<()> {
 struct DiskApp {
     disks: Vec<DiskInfo>,
     error: Option<String>,
-    pending_offline_disk: Option<u32>,
-    processing_disk: Option<u32>,
+    pending_offline_disk: Option<String>,
+    processing_disk: Option<String>,
     op_receiver: Option<Receiver<Result<(), String>>>,
     // Async disk loading
     is_loading_disks: bool,
@@ -68,11 +91,26 @@ impl eframe::App for DiskApp {
                         self.refresh_disks(); // Refresh list after operation
                     }
                     Err(e) => {
-                        // Provide a user-friendly message if the disk is in use
-                        if e.contains("in use") {
-                            self.operation_error = Some("Failed to take disk offline: disk is currently in use by active processes.".to_string());
+                        // Provide a user-friendly message for common errors
+                        let err_lower = e.to_lowercase();
+                        if err_lower.contains(
+                            "disk attributes may not be changed on the current system disk",
+                        ) {
+                            self.operation_error = Some("Operation Failed: Cannot modify the system or boot disk.\n\nWindows prevents taking the drive running the OS offline to avoid a system crash.".to_string());
+                        } else if err_lower.contains("in use") {
+                            self.operation_error = Some("Operation Failed: Disk is currently in use.\n\nPlease close any applications or files using this drive and try again.".to_string());
+                        } else if err_lower.contains("virtual disk service error") {
+                            // Clean up the verbose VDS error
+                            let clean_err = e
+                                .lines()
+                                .find(|l| l.to_lowercase().contains("virtual disk service error"))
+                                .map(|l| l.trim().to_string())
+                                .unwrap_or_else(|| {
+                                    "Unknown Virtual Disk Service Error".to_string()
+                                });
+                            self.operation_error = Some(format!("Operation Failed: {}", clean_err));
                         } else {
-                            self.operation_error = Some(e);
+                            self.operation_error = Some(format!("Operation Failed: {}", e));
                         }
                     }
                 }
@@ -95,7 +133,7 @@ impl eframe::App for DiskApp {
         }
 
         // Confirmation Dialog
-        if let Some(disk_num) = self.pending_offline_disk {
+        if let Some(disk_id) = self.pending_offline_disk.clone() {
             egui::Window::new("⚠️ Critical Warning")
                 .collapsible(false)
                 .resizable(false)
@@ -111,8 +149,9 @@ impl eframe::App for DiskApp {
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if ui.button("Yes, Set Offline").clicked() {
+                            let id = disk_id.clone();
                             self.pending_offline_disk = None;
-                            self.start_disk_operation(disk_num, true); // true = currently online, so set offline
+                            self.start_disk_operation(id, true); // true = currently online, so set offline
                         }
                         if ui.button("Cancel").clicked() {
                             self.pending_offline_disk = None;
@@ -144,15 +183,62 @@ impl eframe::App for DiskApp {
                     let text = if is_dark { "Light Mode" } else { "Dark Mode" };
                     if ui.button(text).clicked() {
                         if is_dark {
-                            // Switch to Light Mode with 95% Grey
+                            // Switch to Light Mode
                             let mut visuals = egui::Visuals::light();
                             let grey_95 = egui::Color32::from_gray(211);
+                            let grey_input = egui::Color32::from_gray(225); // Slightly lighter for inputs/scrollbar
+
                             visuals.panel_fill = grey_95;
                             visuals.window_fill = grey_95;
                             visuals.widgets.noninteractive.bg_fill = grey_95;
+                            visuals.extreme_bg_color = grey_input; // Prevents stark white scrollbar track
+
+                            // Make scrollbar handle/buttons a subtle light grey, not black
+                            visuals.widgets.inactive.bg_fill = egui::Color32::from_gray(190);
+                            visuals.widgets.inactive.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::from_gray(50)); // Text color (Dark Grey)
+                            visuals.widgets.inactive.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
+                            visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(170);
+                            visuals.widgets.hovered.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::from_gray(30)); // Text color (Darker)
+                            visuals.widgets.hovered.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
+                            visuals.widgets.active.bg_fill = egui::Color32::from_gray(150);
+                            visuals.widgets.active.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::BLACK); // Text color (Black)
+                            visuals.widgets.active.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
                             ctx.set_visuals(visuals);
                         } else {
-                            ctx.set_visuals(egui::Visuals::dark());
+                            // Switch to Dark Mode
+                            let mut visuals = egui::Visuals::dark();
+                            visuals.extreme_bg_color = egui::Color32::from_gray(32); // Consistent dark grey
+                            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_gray(32);
+
+                            // Make scrollbar handle/buttons a subtle dark grey
+                            visuals.widgets.inactive.bg_fill = egui::Color32::from_gray(60);
+                            visuals.widgets.inactive.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::from_gray(220)); // Text color
+                            visuals.widgets.inactive.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
+                            visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(75);
+                            visuals.widgets.hovered.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::from_gray(240)); // Text color
+                            visuals.widgets.hovered.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
+                            visuals.widgets.active.bg_fill = egui::Color32::from_gray(90);
+                            visuals.widgets.active.fg_stroke =
+                                egui::Stroke::new(1.0, egui::Color32::WHITE); // Text color
+                            visuals.widgets.active.bg_stroke =
+                                egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
+
+                            ctx.set_visuals(visuals);
                         }
                     }
                     // Refresh button with icon - positioned to the left of theme toggle
@@ -163,6 +249,47 @@ impl eframe::App for DiskApp {
                         self.refresh_disks();
                     }
                 });
+            });
+        });
+
+        // Bottom Panel for Disk Counts
+        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
+            let hdd_count = self
+                .disks
+                .iter()
+                .filter(|d| matches!(d.disk_type, DiskType::HDD))
+                .count();
+            let ssd_count = self
+                .disks
+                .iter()
+                .filter(|d| matches!(d.disk_type, DiskType::SSD))
+                .count();
+            let nvme_count = self
+                .disks
+                .iter()
+                .filter(|d| matches!(d.disk_type, DiskType::NVMe))
+                .count();
+            let ext_hdd_count = self
+                .disks
+                .iter()
+                .filter(|d| matches!(d.disk_type, DiskType::ExtHDD))
+                .count();
+            let usb_count = self
+                .disks
+                .iter()
+                .filter(|d| matches!(d.disk_type, DiskType::USBFlash))
+                .count();
+
+            ui.horizontal(|ui| {
+                ui.label(format!("HDD: {}", hdd_count));
+                ui.separator();
+                ui.label(format!("SSD: {}", ssd_count));
+                ui.separator();
+                ui.label(format!("NVMe: {}", nvme_count));
+                ui.separator();
+                ui.label(format!("Ext. HDD: {}", ext_hdd_count));
+                ui.separator();
+                ui.label(format!("USB Flash: {}", usb_count));
             });
         });
 
@@ -222,59 +349,152 @@ impl eframe::App for DiskApp {
                                         egui::Color32::from_rgb(128, 0, 0)
                                     };
 
-                                    // Colored HDD Icon
-                                    ui.label(
-                                        egui::RichText::new("🖴").size(24.0).color(status_color),
-                                    );
-                                    ui.colored_label(status_color, status);
-                                    if disk.is_system_disk {
-                                        ui.add_space(5.0);
-                                        ui.label(
-                                            egui::RichText::new("[SYSTEM]")
-                                                .color(egui::Color32::RED)
-                                                .strong(),
-                                        );
-                                    }
-                                    ui.add_space(5.0);
-                                    // Avoid "Disk 0: Disk 0" redundancy
-                                    let model_display =
-                                        if disk.model == format!("Disk {}", disk.disk_number) {
-                                            disk.model.clone()
-                                        } else {
-                                            format!("Disk {}: {}", disk.disk_number, disk.model)
+                                    // 1. Icon (Fixed Width 30)
+                                    ui.allocate_ui(egui::vec2(30.0, ui.available_height()), |ui| {
+                                        let icon = match disk.disk_type {
+                                            DiskType::HDD => {
+                                                egui::include_image!("../assets/hdd.svg")
+                                            }
+                                            DiskType::SSD => {
+                                                egui::include_image!("../assets/ssd.svg")
+                                            }
+                                            DiskType::NVMe => {
+                                                egui::include_image!("../assets/nvme.svg")
+                                            }
+                                            DiskType::ExtHDD => {
+                                                egui::include_image!("../assets/external_hdd.svg")
+                                            }
+                                            DiskType::USBFlash => {
+                                                egui::include_image!("../assets/usb.svg")
+                                            }
+                                            _ => egui::include_image!("../assets/hdd.svg"),
                                         };
-                                    let info_text = egui::RichText::new(format!(
-                                        "{} - Size: {:.2} GB",
-                                        model_display,
-                                        disk.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
-                                    ));
-                                    let info_text = if disk.is_system_disk {
-                                        info_text
-                                            .color(egui::Color32::from_rgb(255, 165, 0))
-                                            .strong()
-                                    } else {
-                                        info_text
-                                    };
-                                    ui.label(info_text);
+
+                                        ui.add(
+                                            egui::Image::new(icon)
+                                                .fit_to_exact_size(egui::vec2(24.0, 24.0))
+                                                .tint(status_color),
+                                        );
+                                    });
+
+                                    // 2. Status (Fixed Width 60)
+                                    ui.allocate_ui(egui::vec2(60.0, ui.available_height()), |ui| {
+                                        ui.colored_label(status_color, status);
+                                    });
+
+                                    // 3. Right-aligned elements (Button and Type)
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
-                                            let button_label = if disk.is_online {
-                                                "Set Offline"
+                                            // Button handling per disk type
+                                            if disk.disk_type == DiskType::USBFlash {
+                                                // No disk-level button; handled per-partition above
+                                                ui.allocate_space(egui::vec2(100.0, 20.0));
+                                            } else if disk.disk_type == DiskType::NVMe {
+                                                // NVMe: only allow setting offline
+                                                let button_label = "Set Offline";
+                                                if ui
+                                                    .add_sized(
+                                                        egui::vec2(100.0, 20.0),
+                                                        egui::Button::new(button_label),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    // Force offline operation
+                                                    if disk.is_online {
+                                                        self.start_disk_operation(
+                                                            disk.id.clone(),
+                                                            true,
+                                                        );
+                                                    }
+                                                }
                                             } else {
-                                                "Set Online"
-                                            };
-                                            if ui.button(button_label).clicked() {
-                                                if disk.is_online && disk.is_system_disk {
-                                                    self.pending_offline_disk =
-                                                        Some(disk.disk_number);
+                                                // HDD and ExtHDD: toggle online/offline
+                                                let button_label = if disk.is_online {
+                                                    "Set Offline"
                                                 } else {
-                                                    self.start_disk_operation(
-                                                        disk.disk_number,
-                                                        disk.is_online,
-                                                    );
+                                                    "Set Online"
+                                                };
+                                                if ui
+                                                    .add_sized(
+                                                        egui::vec2(100.0, 20.0),
+                                                        egui::Button::new(button_label),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    if disk.is_online && disk.is_system_disk {
+                                                        self.pending_offline_disk =
+                                                            Some(disk.id.clone());
+                                                    } else {
+                                                        self.start_disk_operation(
+                                                            disk.id.clone(),
+                                                            disk.is_online,
+                                                        );
+                                                    }
                                                 }
                                             }
+
+                                            ui.add_space(10.0);
+
+                                            // Type (Fixed Width 80)
+                                            ui.allocate_ui(
+                                                egui::vec2(80.0, ui.available_height()),
+                                                |ui| {
+                                                    ui.with_layout(
+                                                        egui::Layout::right_to_left(
+                                                            egui::Align::Center,
+                                                        ),
+                                                        |ui| {
+                                                            ui.label(format!(
+                                                                "{:?}",
+                                                                disk.disk_type
+                                                            ));
+                                                        },
+                                                    );
+                                                },
+                                            );
+
+                                            // 4. Info (Model + Size) - Fills remaining middle space
+                                            // We switch back to left-to-right for the text to appear correctly
+                                            ui.with_layout(
+                                                egui::Layout::left_to_right(egui::Align::Center),
+                                                |ui| {
+                                                    if disk.is_system_disk {
+                                                        ui.label(
+                                                            egui::RichText::new("[SYSTEM]")
+                                                                .color(egui::Color32::RED)
+                                                                .strong(),
+                                                        );
+                                                    }
+
+                                                    let model_display = if disk.model
+                                                        == format!("Disk {}", disk.id)
+                                                    {
+                                                        disk.model.clone()
+                                                    } else {
+                                                        format!("Disk {}: {}", disk.id, disk.model)
+                                                    };
+
+                                                    let info_text = format!(
+                                                        "{} - {:.2} GB",
+                                                        model_display,
+                                                        disk.size_bytes as f64
+                                                            / (1024.0 * 1024.0 * 1024.0)
+                                                    );
+
+                                                    let info_text_rich = if disk.is_system_disk {
+                                                        egui::RichText::new(info_text)
+                                                            .color(egui::Color32::from_rgb(
+                                                                255, 165, 0,
+                                                            ))
+                                                            .strong()
+                                                    } else {
+                                                        egui::RichText::new(info_text)
+                                                    };
+
+                                                    ui.label(info_text_rich);
+                                                },
+                                            );
                                         },
                                     );
                                 });
@@ -288,6 +508,25 @@ impl eframe::App for DiskApp {
                                                 part.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
                                                 part.drive_letter
                                             ));
+
+                                            // Add Eject/Mount buttons for USB Flash partitions
+                                            if disk.disk_type == DiskType::USBFlash {
+                                                let is_mounted = !part.drive_letter.is_empty();
+                                                let btn_label =
+                                                    if is_mounted { "Eject" } else { "Mount" };
+                                                if ui.button(btn_label).clicked() {
+                                                    self.start_partition_operation(
+                                                        disk.id.clone(),
+                                                        part.partition_number,
+                                                        if is_mounted {
+                                                            Some(part.drive_letter.clone())
+                                                        } else {
+                                                            None
+                                                        },
+                                                        !is_mounted,
+                                                    );
+                                                }
+                                            }
                                         }
                                     });
                                 }
@@ -312,15 +551,38 @@ impl DiskApp {
         });
     }
 
-    fn start_disk_operation(&mut self, disk_number: u32, is_online: bool) {
-        self.processing_disk = Some(disk_number);
+    fn start_disk_operation(&mut self, disk_id: String, is_online: bool) {
+        self.processing_disk = Some(disk_id.clone());
         let (tx, rx) = channel();
         self.op_receiver = Some(rx);
         thread::spawn(move || {
             let result = if is_online {
-                set_disk_offline(disk_number)
+                set_disk_offline(disk_id)
             } else {
-                set_disk_online(disk_number)
+                set_disk_online(disk_id)
+            };
+            let _ = tx.send(result.map_err(|e| e.to_string()));
+        });
+    }
+
+    fn start_partition_operation(
+        &mut self,
+        disk_id: String,
+        partition_number: u32,
+        drive_letter: Option<String>,
+        is_mount: bool,
+    ) {
+        self.processing_disk = Some(disk_id.clone());
+        let (tx, rx) = channel();
+        self.op_receiver = Some(rx);
+
+        thread::spawn(move || {
+            let result = if is_mount {
+                crate::disk_operations::mount_partition(disk_id, partition_number)
+            } else if let Some(letter) = drive_letter {
+                crate::disk_operations::unmount_partition(letter)
+            } else {
+                Err(anyhow::anyhow!("No drive letter to unmount"))
             };
             let _ = tx.send(result.map_err(|e| e.to_string()));
         });

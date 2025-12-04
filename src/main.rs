@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 use anyhow::{Context, Result};
 use colored::*;
@@ -43,8 +43,8 @@ fn main() -> Result<()> {
 
     if args.len() > 1 {
         // Direct command mode
-        let disk_number: u32 = args[1].parse().context("Invalid disk number")?;
-        toggle_disk(disk_number)?;
+        let disk_id = args[1].clone();
+        toggle_disk(disk_id)?;
     } else {
         // Launch GUI mode
         gui::run_gui()?;
@@ -53,14 +53,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn toggle_disk(disk_number: u32) -> Result<()> {
-    println!("Checking disk {} status...", disk_number);
+fn toggle_disk(disk_id: String) -> Result<()> {
+    println!("Checking disk {} status...", disk_id);
 
     let disks = enumerate_disks()?;
     let disk = disks
         .iter()
-        .find(|d| d.disk_number == disk_number)
-        .context(format!("Disk {} not found", disk_number))?;
+        .find(|d| d.id == disk_id)
+        .context(format!("Disk {} not found", disk_id))?;
 
     // Check if it's a critical system disk
     if disk.is_system_disk {
@@ -85,20 +85,20 @@ fn toggle_disk(disk_number: u32) -> Result<()> {
     if disk.is_online {
         println!(
             "Disk {} is currently {}. Bringing it {}...",
-            disk_number,
+            disk_id,
             "Online".green(),
             "Offline".red()
         );
-        set_disk_offline(disk_number)?;
+        set_disk_offline(disk_id)?;
         println!("{}", "Disk is now Offline.".green());
     } else {
         println!(
             "Disk {} is currently {}. Bringing it {}...",
-            disk_number,
+            disk_id,
             "Offline".red(),
             "Online".green()
         );
-        set_disk_online(disk_number)?;
+        set_disk_online(disk_id)?;
         println!("{}", "Disk is now Online.".green());
     }
 
@@ -132,7 +132,11 @@ fn is_elevated() -> bool {
             elevation.TokenIsElevated != 0
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         false
     }
