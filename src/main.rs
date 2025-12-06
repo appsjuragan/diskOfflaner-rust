@@ -54,13 +54,13 @@ fn main() -> Result<()> {
 }
 
 fn toggle_disk(disk_id: String) -> Result<()> {
-    println!("Checking disk {} status...", disk_id);
+    println!("Checking disk {disk_id} status...");
 
     let disks = enumerate_disks()?;
     let disk = disks
         .iter()
         .find(|d| d.id == disk_id)
-        .context(format!("Disk {} not found", disk_id))?;
+        .context(format!("Disk {disk_id} not found"))?;
 
     // Check if it's a critical system disk
     if disk.is_system_disk {
@@ -105,6 +105,9 @@ fn toggle_disk(disk_id: String) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::borrow_as_ptr)]
+#[allow(clippy::ptr_as_ptr)]
+#[allow(clippy::cast_possible_truncation)]
 fn is_elevated() -> bool {
     #[cfg(windows)]
     {

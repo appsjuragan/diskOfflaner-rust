@@ -1,10 +1,20 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::ignored_unit_patterns)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::match_wildcard_for_single_variants)]
+#![allow(clippy::ref_as_ptr)]
+
 use crate::disk_operations::enumerate_disks;
 use crate::disk_operations::{set_disk_offline, set_disk_online};
 use crate::structs::{DiskInfo, DiskType};
 use anyhow::Result;
 use eframe::egui;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 pub fn run_gui() -> Result<()> {
     let mut options = eframe::NativeOptions::default();
@@ -42,6 +52,8 @@ pub fn run_gui() -> Result<()> {
             let mut app = DiskApp::default();
             // Start initial load
             app.refresh_disks();
+            // Start device change monitoring
+            app.start_device_monitoring(cc.egui_ctx.clone());
             Box::new(app)
         }),
     )
@@ -60,10 +72,34 @@ struct DiskApp {
     disk_load_receiver: Option<Receiver<Result<Vec<DiskInfo>, String>>>,
     // New field for operation errors (e.g., disk in use)
     operation_error: Option<String>,
+    // USB device change detection
+    device_change_receiver: Option<Receiver<()>>,
+    #[allow(dead_code)]
+    last_auto_refresh: Option<Instant>,
+    #[allow(dead_code)]
+    device_monitor_active: Arc<AtomicBool>,
 }
 
 impl eframe::App for DiskApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for device change notifications
+        if let Some(rx) = &self.device_change_receiver {
+            if rx.try_recv().is_ok() {
+                // Device change detected, refresh if not already refreshing
+                // and if enough time has passed since last auto-refresh
+                let should_refresh = if let Some(last_time) = self.last_auto_refresh {
+                    !self.is_loading_disks && last_time.elapsed() > Duration::from_secs(2)
+                } else {
+                    !self.is_loading_disks
+                };
+
+                if should_refresh {
+                    self.last_auto_refresh = Some(Instant::now());
+                    self.refresh_disks();
+                }
+            }
+        }
+
         // Check for disk load results
         if let Some(rx) = &self.disk_load_receiver {
             if let Ok(result) = rx.try_recv() {
@@ -540,6 +576,28 @@ impl eframe::App for DiskApp {
 }
 
 impl DiskApp {
+    fn start_device_monitoring(&mut self, ctx: egui::Context) {
+        let (tx, rx) = channel();
+        self.device_change_receiver = Some(rx);
+        self.last_auto_refresh = Some(Instant::now());
+        let monitor_active = Arc::new(AtomicBool::new(true));
+        self.device_monitor_active = monitor_active.clone();
+
+        #[cfg(target_os = "windows")]
+        {
+            thread::spawn(move || {
+                monitor_device_changes_windows(tx, ctx, monitor_active);
+            });
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            thread::spawn(move || {
+                monitor_device_changes_linux(tx, ctx, monitor_active);
+            });
+        }
+    }
+
     fn refresh_disks(&mut self) {
         self.is_loading_disks = true;
         self.error = None;
@@ -587,4 +645,157 @@ impl DiskApp {
             let _ = tx.send(result.map_err(|e| e.to_string()));
         });
     }
+}
+
+// Platform-specific device change monitoring
+
+#[cfg(target_os = "windows")]
+#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::borrow_as_ptr)]
+fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Arc<AtomicBool>) {
+    use std::ptr;
+    use winapi::shared::minwindef::{LPARAM, LRESULT, UINT, WPARAM};
+    use winapi::shared::windef::HWND;
+    use winapi::um::winuser::{
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
+        TranslateMessage, CS_OWNDC, CW_USEDEFAULT, MSG, WM_DEVICECHANGE, WNDCLASSW,
+        WS_OVERLAPPEDWINDOW,
+    };
+
+    unsafe extern "system" fn window_proc(
+        hwnd: HWND,
+        msg: UINT,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        match msg {
+            WM_DEVICECHANGE => {
+                // DBT_DEVICEARRIVAL = 0x8000, DBT_DEVICEREMOVECOMPLETE = 0x8004
+                if wparam == 0x8000 || wparam == 0x8004 {
+                    // Device connected or disconnected
+                    if let Some(tx) = (lparam as *mut Sender<()>).as_ref() {
+                        let _ = tx.send(());
+                    }
+                }
+                0
+            }
+            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+        }
+    }
+
+    unsafe {
+        // Create a hidden window to receive device change messages
+        let class_name: Vec<u16> = "DiskOfflaner_DeviceMonitor\0".encode_utf16().collect();
+
+        let wc = WNDCLASSW {
+            style: CS_OWNDC,
+            lpfnWndProc: Some(window_proc),
+            cbClsExtra: 0,
+            cbWndExtra: std::mem::size_of::<*const Sender<()>>() as i32,
+            hInstance: ptr::null_mut(),
+            hIcon: ptr::null_mut(),
+            hCursor: ptr::null_mut(),
+            hbrBackground: ptr::null_mut(),
+            lpszMenuName: ptr::null(),
+            lpszClassName: class_name.as_ptr(),
+        };
+
+        RegisterClassW(&wc);
+
+        let window_name: Vec<u16> = "DiskOfflaner Device Monitor\0".encode_utf16().collect();
+
+        let _hwnd = CreateWindowExW(
+            0,
+            class_name.as_ptr(),
+            window_name.as_ptr(),
+            WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &tx as *const Sender<()> as *mut _,
+        );
+
+        // Message loop
+        let mut msg = MSG {
+            hwnd: ptr::null_mut(),
+            message: 0,
+            wParam: 0,
+            lParam: 0,
+            time: 0,
+            pt: std::mem::zeroed(),
+        };
+
+        while active.load(Ordering::Relaxed) && GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+            ctx.request_repaint();
+
+            // Check every second if we should continue
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn monitor_device_changes_linux(tx: Sender<()>, ctx: egui::Context, active: Arc<AtomicBool>) {
+    use std::collections::HashSet;
+    use std::fs;
+
+    // Monitor /dev for block device changes
+    let mut previous_devices = HashSet::new();
+
+    // Initialize with current devices
+    if let Ok(entries) = fs::read_dir("/dev") {
+        for entry in entries.flatten() {
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.starts_with("sd") || name.starts_with("nvme") || name.starts_with("mmcblk")
+                {
+                    previous_devices.insert(name);
+                }
+            }
+        }
+    }
+
+    while active.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_secs(1));
+
+        let mut current_devices = HashSet::new();
+        if let Ok(entries) = fs::read_dir("/dev") {
+            for entry in entries.flatten() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    if name.starts_with("sd")
+                        || name.starts_with("nvme")
+                        || name.starts_with("mmcblk")
+                    {
+                        current_devices.insert(name);
+                    }
+                }
+            }
+        }
+
+        // Check if devices changed
+        if current_devices != previous_devices {
+            let _ = tx.send(());
+            ctx.request_repaint();
+            previous_devices = current_devices;
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[allow(unused_variables)]
+fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Arc<AtomicBool>) {
+    // No-op for unsupported platforms
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[allow(unused_variables)]
+fn monitor_device_changes_linux(tx: Sender<()>, ctx: egui::Context, active: Arc<AtomicBool>) {
+    // No-op for unsupported platforms
 }

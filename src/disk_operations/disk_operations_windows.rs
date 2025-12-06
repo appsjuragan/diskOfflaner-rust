@@ -21,7 +21,7 @@ use crate::structs::{DiskInfo, DiskType, PartitionInfo};
 const OPEN_EXISTING: u32 = 3;
 
 // Definitions for Storage Queries
-const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D1400;
+const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D_1400;
 const STORAGE_DEVICE_PROPERTY: u32 = 0;
 const PROPERTY_STANDARD_QUERY: u32 = 0;
 
@@ -498,9 +498,8 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
                 BUS_TYPE_USB => {
                     if descriptor.RemovableMedia == 1 {
                         return DiskType::USBFlash;
-                    } else {
-                        return DiskType::ExtHDD;
                     }
+                    return DiskType::ExtHDD;
                 }
                 _ => {}
             }
@@ -520,7 +519,7 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
 
 use std::os::windows::process::CommandExt;
 
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     let script = format!("select disk {}\n{} disk\nexit\n", disk_number, command);

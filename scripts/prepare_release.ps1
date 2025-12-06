@@ -86,7 +86,7 @@ Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "1. Review CHANGELOG.md and update if needed"
 Write-Host "2. Update version in Cargo.toml if needed"
 Write-Host "3. Sign the binary: .\scripts\sign_release.ps1"
-Write-Host "4. Create a git tag: git tag -a v1.0.3 -m 'Release v1.0.3'"
+Write-Host "4. Create a git tag: git tag -a v1.0.3 -m 'Release v1.0.3'" -NoNewline; Write-Host ""
 Write-Host "5. Push to GitHub: git push origin v1.0.3"
 Write-Host "6. Create GitHub release and upload binaries"
 Write-Host ""
