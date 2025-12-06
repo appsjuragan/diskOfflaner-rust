@@ -670,13 +670,26 @@ fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Ar
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
+        use winapi::um::winuser::{
+            GetWindowLongPtrW, SetWindowLongPtrW, CREATESTRUCTW, GWLP_USERDATA, WM_CREATE,
+        };
+
         match msg {
+            WM_CREATE => {
+                let create_struct = &*(lparam as *const CREATESTRUCTW);
+                let tx_ptr = create_struct.lpCreateParams;
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, tx_ptr as isize);
+                0
+            }
             WM_DEVICECHANGE => {
                 // DBT_DEVICEARRIVAL = 0x8000, DBT_DEVICEREMOVECOMPLETE = 0x8004
                 if wparam == 0x8000 || wparam == 0x8004 {
                     // Device connected or disconnected
-                    if let Some(tx) = (lparam as *mut Sender<()>).as_ref() {
-                        let _ = tx.send(());
+                    let tx_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Sender<()>;
+                    if !tx_ptr.is_null() {
+                        if let Some(tx) = tx_ptr.as_ref() {
+                            let _ = tx.send(());
+                        }
                     }
                 }
                 0

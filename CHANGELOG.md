@@ -15,7 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Runs in background thread for non-blocking operation
 - Documentation for USB auto-refresh feature (USB_AUTO_REFRESH.md)
 
-## [1.0.3] - 2025-12-06
+## [1.0.5] - 2025-12-06
+
+### Fixed
+- **Windows USB Detection**: Fixed an issue where USB drive connection/disconnection events were not correctly triggering a refresh due to incorrect message parameter handling in the window procedure.
+
+## [1.0.4] - 2025-12-06
 
 ### Added
 - Release quality assurance and optimization
