@@ -70,8 +70,6 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     Ok(disks)
 }
 
-
-
 fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
     unsafe {
         let mut geometry: DISK_GEOMETRY_EX = mem::zeroed();
@@ -100,7 +98,7 @@ fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
 // OPTIMIZED: Call diskpart ONCE for ALL disks and return a HashMap of statuses
 fn check_all_disks_online() -> std::collections::HashMap<u32, bool> {
     let mut status_map = std::collections::HashMap::new();
-    
+
     let script = "list disk\nexit\n".to_string();
 
     let output = match Command::new("diskpart")
@@ -169,12 +167,12 @@ fn get_disk_info_with_status(
 
         // Get disk geometry to determine size
         let size_bytes = get_disk_size(handle)?;
-        
+
         // Use cached online status (OPTIMIZATION: no diskpart call per disk)
         let is_online = status_map.get(&disk_number).copied().unwrap_or(true);
-        
+
         let partitions = get_partitions(disk_number)?;
-        
+
         // Determine system drive letter (e.g., "C")
         let system_drive_letter = std::env::var("SystemDrive")
             .ok()
@@ -205,8 +203,6 @@ fn get_disk_info_with_status(
         })
     }
 }
-
-
 
 // Helper to get all partitions using Drive Layout
 fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
@@ -293,10 +289,10 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     // 2. Get mounted volumes (Drive Letters) on this disk
     // OPTIMIZATION: Only check MOUNTED drives using GetLogicalDrives
     let mut mounted_map = std::collections::HashMap::new();
-    
+
     unsafe {
         let drives_bitmask = winapi::um::fileapi::GetLogicalDrives();
-        
+
         for i in 0..26 {
             // Check if this drive letter is mounted
             if (drives_bitmask & (1 << i)) != 0 {
@@ -325,12 +321,14 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     if partitions.is_empty() {
         unsafe {
             let drives_bitmask = winapi::um::fileapi::GetLogicalDrives();
-            
+
             for i in 0..26 {
                 if (drives_bitmask & (1 << i)) != 0 {
                     let drive_letter = ((b'A' + i) as char).to_string();
                     let volume_path = format!("\\\\.\\{}:", drive_letter);
-                    if let Ok(partition) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
+                    if let Ok(partition) =
+                        get_partition_on_disk(&volume_path, disk_number, &drive_letter)
+                    {
                         partitions.push(partition);
                     }
                 }

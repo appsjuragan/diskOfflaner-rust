@@ -1,8 +1,13 @@
 # DiskOfflaner
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/appsjuragan/diskOfflaner-rust)
+[![Version](https://img.shields.io/badge/version-1.0.3-green.svg)](CHANGELOG.md)
+
 **Safe and simple disk management for Windows and Linux.**
 
-DiskOfflaner is a desktop application designed to manage the online/offline status of physical disk drives. It provides a safe, user-friendly interface for system administrators and power users to disconnect drives via software without the need for physical removal.
+DiskOfflaner is a cross-platform desktop application designed to manage the online/offline status of physical disk drives. It provides a safe, user-friendly interface for system administrators and power users to control disk availability without physical hardware manipulation.
 
 ## Features
 
@@ -15,6 +20,7 @@ DiskOfflaner is a desktop application designed to manage the online/offline stat
   - **Confirmation**: Requires explicit confirmation for sensitive operations.
   - **Usage Detection**: Prevents operations on drives that are currently in use to avoid data loss.
 - **Modern Interface**: Includes both Dark and Light themes for comfortable usage in any environment.
+- **Cross-Platform**: Native support for Windows and Linux with platform-optimized disk operations.
 
 ## System Requirements
 
@@ -25,7 +31,7 @@ DiskOfflaner is a desktop application designed to manage the online/offline stat
 ### Linux
 - Modern Linux Distribution (Ubuntu, Fedora, Arch, etc.)
 - Root/Sudo privileges (required for disk management)
-- `lsblk` utility
+- `lsblk` utility (pre-installed on most distributions)
 
 ## Getting Started
 
@@ -45,10 +51,11 @@ DiskOfflaner is a desktop application designed to manage the online/offline stat
 - **Set Online**: Click the "Set Online" button to remount a disk.
 - **Refresh**: Use the Refresh button in the top panel to update the list after connecting new hardware.
 - **Theme**: Toggle between Light and Dark modes using the theme button in the header.
+- **Partition Management**: View partition details and manage mount/unmount operations (Linux).
 
 ## Building from Source
 
-To build from source, ensure you have [Rust](https://www.rust-lang.org/tools/install) installed.
+To build from source, ensure you have [Rust](https://www.rust-lang.org/tools/install) installed (version 1.80 or later recommended).
 
 ```bash
 # Clone the repository
@@ -61,8 +68,29 @@ cd diskOfflaner-rust
 cargo build --release
 ```
 
-- **Windows Output**: `target/release/diskofflaner.exe`
-- **Linux Output**: `target/release/diskofflaner`
+**Output locations:**
+- Windows: `target/release/diskofflaner.exe`
+- Linux: `target/release/diskofflaner`
+
+### Development
+
+For development and testing:
+
+```bash
+# Format code
+cargo fmt --all
+
+# Run linter
+cargo clippy --all-targets --all-features
+
+# Run tests
+cargo test --all
+
+# Build and run in debug mode
+cargo run
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 
 ### Code Signing (Windows)
 
@@ -81,22 +109,47 @@ cargo build --release
 
 For detailed instructions on certificates and signing, see `scripts/SIGNING_QUICK_REFERENCE.md`.
 
+## Architecture
+
+DiskOfflaner is built with:
+- **Language**: Rust (2021 edition)
+- **GUI Framework**: egui/eframe for cross-platform native UI
+- **Platform Integration**: 
+  - Windows: WinAPI for IOCTL disk operations
+  - Linux: Direct system calls and `lsblk` integration
+
 ## Target Audience
 
 - **System Administrators**: Manage multiple drives across workstations efficiently.
 - **IT Professionals**: Perform maintenance without rebooting or physical access.
 - **Data Managers**: Safely handle large collections of external storage.
+- **Power Users**: Control disk availability without complex CLI commands.
 
 ## Important Notes
 
+⚠️ **Safety First**:
 - **Backups**: Always ensure you have backups before performing disk operations.
 - **System Disks**: Avoid taking system or boot disks offline unless absolutely necessary.
 - **Active Files**: Ensure no applications are actively reading from or writing to a disk before setting it offline.
+- **Data Loss Prevention**: The application includes safeguards, but user discretion is essential.
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 
 ## License
 
-[MIT License](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/appsjuragan/diskOfflaner-rust/issues)
+- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/appsjuragan/diskOfflaner-rust/discussions)
 
 ---
 
-Built with Rust for performance and reliability.
+Built with ❤️ and Rust for performance, safety, and reliability.

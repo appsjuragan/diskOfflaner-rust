@@ -1,0 +1,8 @@
+[target.'cfg(all())']
+rustflags = [
+    "-D", "warnings",           # Deny all warnings
+    "-D", "clippy::all",        # Deny all clippy lints
+    "-D", "clippy::pedantic",   # Deny pedantic lints
+    "-A", "clippy::module-name-repetitions",  # Allow module name repetitions
+    "-A", "clippy::must-use-candidate",       # Allow non-must-use functions
+]

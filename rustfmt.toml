@@ -1,0 +1,38 @@
+# Configuration for rustfmt (Rust code formatter)
+# Run with: cargo fmt
+# Note: Some advanced features require nightly Rust
+
+# Edition configuration
+edition = "2021"
+
+# Maximum line width
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use spaces instead of tabs
+hard_tabs = false
+
+# Use field initialization shorthand
+use_field_init_shorthand = true
+
+# Use try shorthand
+use_try_shorthand = true
+
+# Reorder imports (stable)
+reorder_imports = true
+
+# Reorder modules (stable)
+reorder_modules = true
+
+# Note: The following features require nightly Rust:
+# - format_strings
+# - format_macro_matchers
+# - format_macro_bodies
+# - imports_granularity
+# - group_imports
+# - imports_layout
+# - format_code_in_doc_comments
+# - normalize_comments
+# - wrap_comments
