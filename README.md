@@ -109,6 +109,24 @@ cargo build --release
 
 For detailed instructions on certificates and signing, see `scripts/SIGNING_QUICK_REFERENCE.md`.
 
+### Application Icon
+
+The application includes a custom icon that represents disk management:
+- **Windows**: The icon is automatically embedded in the `.exe` file during compilation
+- **Linux**: Use the installation script to properly install the icon and desktop entry:
+  ```bash
+  chmod +x scripts/install_linux.sh
+  sudo ./scripts/install_linux.sh
+  ```
+
+To update the icon design, replace `assets/icon.png` and run:
+```powershell
+# On Windows - converts PNG to multi-resolution ICO
+powershell -ExecutionPolicy Bypass -File .\scripts\convert_icon.ps1
+```
+
+See [ICON_SETUP.md](ICON_SETUP.md) for detailed information.
+
 ## Architecture
 
 DiskOfflaner is built with:

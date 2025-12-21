@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Debounced to prevent excessive refreshes (2-second minimum interval)
   - Runs in background thread for non-blocking operation
 - Documentation for USB auto-refresh feature (USB_AUTO_REFRESH.md)
+- **Application Icon**: Professional custom icon representing disk management
+  - Automatically embedded in Windows executables during build
+  - Multi-resolution ICO format (16x16 to 256x256)
+  - PNG format for Linux desktop integration
+  - Desktop entry file for Linux application launchers
+  - Helper scripts for icon conversion and Linux installation
 
 ## [1.0.5] - 2025-12-06
 

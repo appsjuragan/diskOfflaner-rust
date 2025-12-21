@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=DiskOfflaner
+GenericName=Disk Management Tool
+Comment=Safe and simple disk management for Windows and Linux
+Exec=/usr/local/bin/diskofflaner
+Icon=/usr/share/pixmaps/diskofflaner.png
+Terminal=false
+Categories=System;Utility;
+Keywords=disk;storage;management;offline;partition;
+StartupNotify=true
+StartupWMClass=diskofflaner
+
+# Requires root/sudo privileges
+X-GNOME-UsesNotifications=true

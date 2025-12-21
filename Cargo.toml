@@ -30,6 +30,9 @@ winapi = { version = "0.3", features = [
     "wincon"
 ] }
 
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 # Aggressive size optimization for release builds
 [profile.release]
 opt-level = "z"         # Optimize for size instead of speed
