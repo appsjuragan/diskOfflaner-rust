@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/appsjuragan/diskOfflaner-rust)
-[![Version](https://img.shields.io/badge/version-1.0.3-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.5-green.svg)](CHANGELOG.md)
 
 **Safe and simple disk management for Windows and Linux.**
 
@@ -11,16 +11,16 @@ DiskOfflaner is a cross-platform desktop application designed to manage the onli
 
 ## Features
 
-- **Visual Dashboard**: View all physical disks, models, sizes, and partition information in a clean layout.
-- **Status Indicators**: Clear visual cues distinguish between Online (Green) and Offline (Red) drives.
-- **One-Click Control**: Toggle disk status easily without complex command-line tools.
-- **Smart Refresh**: Updates disk information in the background without interrupting the user interface.
+- **Visual Dashboard**: View all physical disks, models, sizes, and partition information in a clean layout
+- **Status Indicators**: Clear visual cues distinguish between Online (Green) and Offline (Red) drives
+- **One-Click Control**: Toggle disk status easily without complex command-line tools
+- **USB Auto-Detection**: Automatically detects when USB drives are connected or disconnected
 - **Safety Mechanisms**:
-  - **System Protection**: Identifies and warns against modifying critical boot/system disks.
-  - **Confirmation**: Requires explicit confirmation for sensitive operations.
-  - **Usage Detection**: Prevents operations on drives that are currently in use to avoid data loss.
-- **Modern Interface**: Includes both Dark and Light themes for comfortable usage in any environment.
-- **Cross-Platform**: Native support for Windows and Linux with platform-optimized disk operations.
+  - System Protection: Identifies and warns against modifying critical boot/system disks
+  - Confirmation: Requires explicit confirmation for sensitive operations
+  - Usage Detection: Prevents operations on drives that are currently in use to avoid data loss
+- **Modern Interface**: Includes both Dark and Light themes for comfortable usage in any environment
+- **Cross-Platform**: Native support for Windows and Linux with platform-optimized disk operations
 
 ## System Requirements
 
@@ -36,22 +36,28 @@ DiskOfflaner is a cross-platform desktop application designed to manage the onli
 ## Getting Started
 
 ### Windows
-1. Download `diskofflaner.exe` from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page.
-2. Right-click the executable and select **Run as administrator**.
-3. The application will launch and scan your disks automatically.
+1. Download `diskofflaner.exe` from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
+2. Right-click the executable and select **Run as administrator**  
+3. The application will launch and scan your disks automatically
 
 ### Linux
-1. Download the Linux binary from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page.
+1. Download the Linux binary from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
 2. Make the file executable: `chmod +x diskofflaner`
 3. Run with privileges: `sudo ./diskofflaner`
 
+Or install with icon support:
+```bash
+chmod +x scripts/install_linux.sh
+sudo ./scripts/install_linux.sh
+```
+
 ## Usage
 
-- **Set Offline**: Click the "Set Offline" button next to any active disk to safely disconnect it.
-- **Set Online**: Click the "Set Online" button to remount a disk.
-- **Refresh**: Use the Refresh button in the top panel to update the list after connecting new hardware.
-- **Theme**: Toggle between Light and Dark modes using the theme button in the header.
-- **Partition Management**: View partition details and manage mount/unmount operations (Linux).
+- **Set Offline**: Click the "Set Offline" button next to any active disk to safely disconnect it
+- **Set Online**: Click the "Set Online" button to remount a disk
+- **Refresh**: Use the Refresh button in the top panel to update the list after connecting new hardware
+- **Theme**: Toggle between Light and Dark modes using the theme button in the header
+- **Partition Management**: View partition details and manage mount/unmount operations (Linux)
 
 ## Building from Source
 
@@ -74,8 +80,6 @@ cargo build --release
 
 ### Development
 
-For development and testing:
-
 ```bash
 # Format code
 cargo fmt --all
@@ -92,41 +96,6 @@ cargo run
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 
-### Code Signing (Windows)
-
-For production releases, the executable should be digitally signed to establish trust and avoid Windows SmartScreen warnings.
-
-```powershell
-# Build optimized release
-cargo build --release
-
-# Sign with your certificate
-.\scripts\sign_release.ps1
-
-# Verify signature
-.\scripts\verify_signature.ps1
-```
-
-For detailed instructions on certificates and signing, see `scripts/SIGNING_QUICK_REFERENCE.md`.
-
-### Application Icon
-
-The application includes a custom icon that represents disk management:
-- **Windows**: The icon is automatically embedded in the `.exe` file during compilation
-- **Linux**: Use the installation script to properly install the icon and desktop entry:
-  ```bash
-  chmod +x scripts/install_linux.sh
-  sudo ./scripts/install_linux.sh
-  ```
-
-To update the icon design, replace `assets/icon.png` and run:
-```powershell
-# On Windows - converts PNG to multi-resolution ICO
-powershell -ExecutionPolicy Bypass -File .\scripts\convert_icon.ps1
-```
-
-See [ICON_SETUP.md](ICON_SETUP.md) for detailed information.
-
 ## Architecture
 
 DiskOfflaner is built with:
@@ -136,20 +105,13 @@ DiskOfflaner is built with:
   - Windows: WinAPI for IOCTL disk operations
   - Linux: Direct system calls and `lsblk` integration
 
-## Target Audience
-
-- **System Administrators**: Manage multiple drives across workstations efficiently.
-- **IT Professionals**: Perform maintenance without rebooting or physical access.
-- **Data Managers**: Safely handle large collections of external storage.
-- **Power Users**: Control disk availability without complex CLI commands.
-
 ## Important Notes
 
 ⚠️ **Safety First**:
-- **Backups**: Always ensure you have backups before performing disk operations.
-- **System Disks**: Avoid taking system or boot disks offline unless absolutely necessary.
-- **Active Files**: Ensure no applications are actively reading from or writing to a disk before setting it offline.
-- **Data Loss Prevention**: The application includes safeguards, but user discretion is essential.
+- **Backups**: Always ensure you have backups before performing disk operations
+- **System Disks**: Avoid taking system or boot disks offline unless absolutely necessary
+- **Active Files**: Ensure no applications are actively reading from or writing to a disk before setting it offline
+- **Data Loss Prevention**: The application includes safeguards, but user discretion is essential
 
 ## Contributing
 
