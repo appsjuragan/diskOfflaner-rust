@@ -15,11 +15,13 @@ DiskOfflaner is a cross-platform desktop application designed to manage the onli
 - **Status Indicators**: Clear visual cues distinguish between Online (Green) and Offline (Red) drives
 - **One-Click Control**: Toggle disk status easily without complex command-line tools
 - **USB Auto-Detection**: Automatically detects when USB drives are connected or disconnected
+- **Improved Disk Detection**: Accurately distinguishes between SSD, HDD, and NVMe drives on Windows using seek penalty checks
 - **Safety Mechanisms**:
-  - System Protection: Identifies and warns against modifying critical boot/system disks
+  - System Protection: Robust identification of critical boot/system disks using volume extents
   - Confirmation: Requires explicit confirmation for sensitive operations
   - Usage Detection: Prevents operations on drives that are currently in use to avoid data loss
 - **Modern Interface**: Includes both Dark and Light themes for comfortable usage in any environment
+- **Modular GUI**: Refactored component-based architecture for better maintainability and performance
 - **Cross-Platform**: Native support for Windows and Linux with platform-optimized disk operations
 
 ## System Requirements
