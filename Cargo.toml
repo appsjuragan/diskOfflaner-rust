@@ -27,7 +27,8 @@ winapi = { version = "0.3", features = [
     "processthreadsapi",
     "securitybaseapi",
     "ioapiset",
-    "wincon"
+    "wincon",
+    "sysinfoapi"
 ] }
 
 [target.'cfg(windows)'.build-dependencies]

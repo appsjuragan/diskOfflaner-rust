@@ -24,6 +24,7 @@ const OPEN_EXISTING: u32 = 3;
 const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D_1400;
 const STORAGE_DEVICE_PROPERTY: u32 = 0;
 const PROPERTY_STANDARD_QUERY: u32 = 0;
+const STORAGE_DEVICE_SEEK_PENALTY_PROPERTY: u32 = 7;
 
 #[repr(C)]
 #[allow(non_snake_case)]
@@ -49,6 +50,14 @@ struct STORAGE_DEVICE_DESCRIPTOR {
     BusType: u32,
     RawPropertiesLength: u32,
     RawDeviceProperties: [u8; 1],
+}
+
+#[repr(C)]
+#[allow(non_snake_case)]
+struct DEVICE_SEEK_PENALTY_DESCRIPTOR {
+    Version: u32,
+    Size: u32,
+    IncursSeekPenalty: u8,
 }
 
 const BUS_TYPE_USB: u32 = 7;
@@ -173,18 +182,21 @@ fn get_disk_info_with_status(
 
         let partitions = get_partitions(disk_number)?;
 
-        // Determine system drive letter (e.g., "C")
-        let system_drive_letter = std::env::var("SystemDrive")
-            .ok()
-            .and_then(|s| s.chars().next())
-            .map(|c| c.to_ascii_uppercase().to_string());
-        let is_system_disk = if let Some(sys) = system_drive_letter {
-            partitions
-                .iter()
-                .any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
+        // Determine system disk number accurately
+        let system_disk_number = get_system_disk_number();
+        let is_system_disk = if let Some(sys_num) = system_disk_number {
+            disk_number == sys_num
         } else {
-            // Fallback heuristic: first disk (0) is system disk
-            disk_number == 0
+            // Fallback to drive letter check
+            let system_drive_letter = std::env::var("SystemDrive")
+                .ok()
+                .and_then(|s| s.chars().next())
+                .map(|c| c.to_ascii_uppercase().to_string());
+            if let Some(sys) = system_drive_letter {
+                partitions.iter().any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
+            } else {
+                disk_number == 0
+            }
         };
 
         // Determine disk type before moving partitions
@@ -491,28 +503,53 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
             &mut bytes_returned,
             std::ptr::null_mut(),
         );
-        CloseHandle(handle);
         if success != 0 {
             match descriptor.BusType {
-                BUS_TYPE_NVME => return DiskType::NVMe,
+                BUS_TYPE_NVME => {
+                    CloseHandle(handle);
+                    return DiskType::NVMe;
+                }
                 BUS_TYPE_USB => {
                     if descriptor.RemovableMedia == 1 {
+                        CloseHandle(handle);
                         return DiskType::USBFlash;
                     }
+                    CloseHandle(handle);
                     return DiskType::ExtHDD;
                 }
                 _ => {}
             }
         }
-    }
-    // If we are here, it's likely HDD or SSD (SATA/SAS).
-    // TODO: Implement SSD vs HDD detection via SeekPenalty or RPM if needed.
-    // For now, default to HDD unless we find a better way to detect SSD.
-    // Many modern SATA SSDs are hard to distinguish without more complex queries (TRIM check).
 
-    // Let's try a simple TRIM check if possible, or just default to HDD.
-    // Given the user specifically asked for NVMe fix, the BusType check above covers that.
-    // If they want SATA SSD detection, we can add it later.
+        // If we are here, it's likely HDD or SSD (SATA/SAS).
+        // Try to check for seek penalty to distinguish HDD vs SSD.
+        let mut seek_penalty: DEVICE_SEEK_PENALTY_DESCRIPTOR = mem::zeroed();
+        let mut query = STORAGE_PROPERTY_QUERY {
+            PropertyId: STORAGE_DEVICE_SEEK_PENALTY_PROPERTY,
+            QueryType: PROPERTY_STANDARD_QUERY,
+            AdditionalParameters: [0; 1],
+        };
+        let mut bytes_returned = 0u32;
+        let success = DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            &mut query as *mut _ as *mut _,
+            mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            &mut seek_penalty as *mut _ as *mut _,
+            mem::size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>() as u32,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        );
+        CloseHandle(handle);
+
+        if success != 0 {
+            if seek_penalty.IncursSeekPenalty == 0 {
+                return DiskType::SSD;
+            } else {
+                return DiskType::HDD;
+            }
+        }
+    }
 
     DiskType::HDD
 }
@@ -547,4 +584,68 @@ fn execute_disk_command(disk_number: u32, command: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn get_system_disk_number() -> Option<u32> {
+    use winapi::um::fileapi::GetVolumePathNameW;
+    use winapi::um::sysinfoapi::GetSystemDirectoryW;
+
+    unsafe {
+        let mut system_dir = [0u16; 260];
+        let len = GetSystemDirectoryW(system_dir.as_mut_ptr(), 260);
+        if len == 0 {
+            return None;
+        }
+
+        let mut volume_path = [0u16; 260];
+        if GetVolumePathNameW(system_dir.as_ptr(), volume_path.as_mut_ptr(), 260) == 0 {
+            return None;
+        }
+
+        // volume_path is like "C:\"
+        let mut wide_volume: Vec<u16> = volume_path.iter().take_while(|&&c| c != 0).cloned().collect();
+        // Remove trailing backslash for CreateFile
+        if wide_volume.last() == Some(&(b'\\' as u16)) {
+            wide_volume.pop();
+        }
+
+        // Add \\.\ prefix
+        let mut full_path = "\\\\.\\".encode_utf16().collect::<Vec<u16>>();
+        full_path.extend(wide_volume);
+        full_path.push(0);
+
+        let handle = CreateFileW(
+            full_path.as_ptr(),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        );
+
+        if handle == INVALID_HANDLE_VALUE {
+            return None;
+        }
+
+        let mut extents: VOLUME_DISK_EXTENTS = mem::zeroed();
+        let mut bytes_returned = 0u32;
+        let success = DeviceIoControl(
+            handle,
+            IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+            std::ptr::null_mut(),
+            0,
+            &mut extents as *mut _ as *mut _,
+            mem::size_of::<VOLUME_DISK_EXTENTS>() as u32,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        );
+
+        CloseHandle(handle);
+
+        if success != 0 && extents.NumberOfDiskExtents > 0 {
+            return Some(extents.Extents[0].DiskNumber);
+        }
+    }
+    None
 }
