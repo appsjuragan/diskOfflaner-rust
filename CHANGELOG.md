@@ -5,21 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.8] - 2026-01-23
 
 ### Added
-- **USB Auto-Refresh**: Automatically detects when USB drives are connected or disconnected
-  - Windows: Uses WM_DEVICECHANGE messages for instant detection
-  - Linux: Monitors /dev directory for block device changes
-  - Debounced to prevent excessive refreshes (2-second minimum interval)
-  - Runs in background thread for non-blocking operation
-- Documentation for USB auto-refresh feature (USB_AUTO_REFRESH.md)
-- **Application Icon**: Professional custom icon representing disk management
-  - Automatically embedded in Windows executables during build
-  - Multi-resolution ICO format (16x16 to 256x256)
-  - PNG format for Linux desktop integration
-  - Desktop entry file for Linux application launchers
-  - Helper scripts for icon conversion and Linux installation
+- **Unit Tests**: Added comprehensive unit tests for data structures (`DiskInfo`, `DiskType`, `PartitionInfo`).
+- **USB Auto-Refresh**: Automatically detects when USB drives are connected or disconnected.
+  - Windows: Uses WM_DEVICECHANGE messages for instant detection.
+  - Linux: Monitors /dev directory for block device changes.
+  - Debounced to prevent excessive refreshes.
+- **Application Icon**: Professional custom icon representing disk management.
+
+### Changed
+- **Code Refactoring**: Centralized theme configuration into `src/gui/themes.rs` to eliminate duplication.
+- **Type Safety**: Improved `DiskAction` enum with named struct variants for clearer code intent.
+- **Maintainability**: Replaced magic numbers with named constants in Windows disk operations.
+- **UI**: Improved `DiskType` display with human-readable names.
+
+### Fixed
+- Fixed clippy warnings in build script.
+
 
 ## [1.0.5] - 2025-12-06
 

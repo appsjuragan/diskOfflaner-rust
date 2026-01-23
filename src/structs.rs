@@ -1,13 +1,27 @@
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum DiskType {
+    #[default]
     HDD,
     SSD,
     NVMe,
     ExtHDD,
     USBFlash,
     Unknown,
+}
+
+impl std::fmt::Display for DiskType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DiskType::HDD => write!(f, "HDD"),
+            DiskType::SSD => write!(f, "SSD"),
+            DiskType::NVMe => write!(f, "NVMe"),
+            DiskType::ExtHDD => write!(f, "External HDD"),
+            DiskType::USBFlash => write!(f, "USB Flash"),
+            DiskType::Unknown => write!(f, "Unknown"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -11,6 +11,9 @@ mod disk_operations;
 mod gui;
 mod structs;
 
+#[cfg(test)]
+mod tests;
+
 use disk_operations::{enumerate_disks, set_disk_offline, set_disk_online};
 
 fn main() -> Result<()> {

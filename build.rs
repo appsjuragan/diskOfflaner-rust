@@ -10,7 +10,7 @@ fn main() {
         res.set("LegalCopyright", "Copyright (c) 2024");
         
         if let Err(e) = res.compile() {
-            eprintln!("Failed to compile resources: {}", e);
+            eprintln!("Failed to compile resources: {e}");
             std::process::exit(1);
         }
     }

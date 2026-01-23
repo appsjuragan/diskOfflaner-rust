@@ -60,8 +60,12 @@ struct DEVICE_SEEK_PENALTY_DESCRIPTOR {
     IncursSeekPenalty: u8,
 }
 
+// Bus type constants for STORAGE_DEVICE_DESCRIPTOR.BusType
 const BUS_TYPE_USB: u32 = 7;
 const BUS_TYPE_NVME: u32 = 17;
+
+// Maximum number of physical disks to enumerate
+const MAX_DISK_COUNT: u32 = 32;
 
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
@@ -69,8 +73,8 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
     let disk_status_map = check_all_disks_online();
 
-    // Enumerate up to 32 physical disks
-    for disk_num in 0..32 {
+    // Enumerate physical disks
+    for disk_num in 0..MAX_DISK_COUNT {
         if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map) {
             disks.push(disk_info);
         }

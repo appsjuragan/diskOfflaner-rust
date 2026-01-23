@@ -6,6 +6,7 @@
 #![allow(clippy::ref_as_ptr)]
 
 pub mod components;
+pub mod themes;
 
 use crate::disk_operations::enumerate_disks;
 use crate::disk_operations::{set_disk_offline, set_disk_online};
@@ -28,24 +29,8 @@ pub fn run_gui() -> Result<()> {
         &format!("DiskOfflaner v{}", env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|cc| {
-            // Default to Dark Mode
-            let mut visuals = egui::Visuals::dark();
-            visuals.extreme_bg_color = egui::Color32::from_gray(32);
-            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_gray(32);
-
-            visuals.widgets.inactive.bg_fill = egui::Color32::from_gray(60);
-            visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(220));
-            visuals.widgets.inactive.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
-
-            visuals.widgets.hovered.bg_fill = egui::Color32::from_gray(75);
-            visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(240));
-            visuals.widgets.hovered.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
-
-            visuals.widgets.active.bg_fill = egui::Color32::from_gray(90);
-            visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-            visuals.widgets.active.bg_stroke = egui::Stroke::new(0.0, egui::Color32::TRANSPARENT);
-
-            cc.egui_ctx.set_visuals(visuals);
+            // Default to Dark Mode using centralized theme
+            themes::apply_dark_theme(&cc.egui_ctx);
             egui_extras::install_image_loaders(&cc.egui_ctx);
 
             let mut app = DiskApp::default();
@@ -177,11 +162,21 @@ impl eframe::App for DiskApp {
 
                 if let Some(act) = action {
                     match act {
-                        DiskAction::DiskOp(id, online) => self.start_disk_operation(id, online),
-                        DiskAction::PartitionOp(id, num, letter, mount) => {
-                            self.start_partition_operation(id, num, letter, mount)
+                        DiskAction::SetOffline { disk_id } => {
+                            self.start_disk_operation(disk_id, true)
                         }
-                        DiskAction::PendingOffline(id) => self.pending_offline_disk = Some(id),
+                        DiskAction::SetOnline { disk_id } => {
+                            self.start_disk_operation(disk_id, false)
+                        }
+                        DiskAction::ConfirmSystemOffline { disk_id } => {
+                            self.pending_offline_disk = Some(disk_id)
+                        }
+                        DiskAction::MountPartition { disk_id, partition_number } => {
+                            self.start_partition_operation(disk_id, partition_number, None, true)
+                        }
+                        DiskAction::UnmountPartition { disk_id, drive_letter } => {
+                            self.start_partition_operation(disk_id, 0, Some(drive_letter), false)
+                        }
                     }
                 }
             });
@@ -338,6 +333,11 @@ fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Ar
 
     unsafe extern "system" fn window_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         use winapi::um::winuser::{GetWindowLongPtrW, SetWindowLongPtrW, CREATESTRUCTW, GWLP_USERDATA, WM_CREATE};
+        
+        // WM_DEVICECHANGE wparam constants
+        const DBT_DEVICEARRIVAL: usize = 0x8000;
+        const DBT_DEVICEREMOVECOMPLETE: usize = 0x8004;
+        
         match msg {
             WM_CREATE => {
                 let create_struct = &*(lparam as *const CREATESTRUCTW);
@@ -346,7 +346,7 @@ fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Ar
                 0
             }
             WM_DEVICECHANGE => {
-                if wparam == 0x8000 || wparam == 0x8004 {
+                if wparam == DBT_DEVICEARRIVAL || wparam == DBT_DEVICEREMOVECOMPLETE {
                     let tx_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Sender<()>;
                     if !tx_ptr.is_null() {
                         if let Some(tx) = tx_ptr.as_ref() {

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/appsjuragan/diskOfflaner-rust)
-[![Version](https://img.shields.io/badge/version-1.0.5-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.8-green.svg)](CHANGELOG.md)
 
 **Safe and simple disk management for Windows and Linux.**
 
