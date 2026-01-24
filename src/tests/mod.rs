@@ -42,7 +42,7 @@ mod structs_tests {
             drive_letter: "C".to_string(),
             partition_id: "PART1".to_string(),
         };
-        
+
         assert_eq!(partition.partition_number, 1);
         assert_eq!(partition.size_bytes, 1_073_741_824);
         assert_eq!(partition.drive_letter, "C");
@@ -60,7 +60,7 @@ mod structs_tests {
             partitions: vec![],
             disk_type: DiskType::SSD,
         };
-        
+
         assert_eq!(disk.id, "0");
         assert_eq!(disk.model, "Test Disk");
         assert!(disk.is_online);
@@ -77,14 +77,14 @@ mod structs_tests {
             drive_letter: "C".to_string(),
             partition_id: "P1".to_string(),
         };
-        
+
         let partition2 = PartitionInfo {
             partition_number: 2,
             size_bytes: 200 * 1024 * 1024 * 1024,
             drive_letter: "D".to_string(),
             partition_id: "P2".to_string(),
         };
-        
+
         let disk = DiskInfo {
             id: "1".to_string(),
             model: "Multi-partition Disk".to_string(),
@@ -94,7 +94,7 @@ mod structs_tests {
             partitions: vec![partition1, partition2],
             disk_type: DiskType::HDD,
         };
-        
+
         assert_eq!(disk.partitions.len(), 2);
         assert!(disk.is_system_disk);
         assert_eq!(disk.partitions[0].drive_letter, "C");
@@ -112,7 +112,7 @@ mod structs_tests {
             partitions: vec![],
             disk_type: DiskType::USBFlash,
         };
-        
+
         let cloned = disk.clone();
         assert_eq!(disk.id, cloned.id);
         assert_eq!(disk.model, cloned.model);

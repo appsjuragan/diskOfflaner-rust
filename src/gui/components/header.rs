@@ -1,7 +1,12 @@
-use eframe::egui;
 use crate::gui::themes;
+use eframe::egui;
 
-pub fn show_header(ui: &mut egui::Ui, ctx: &egui::Context, is_loading: bool, on_refresh: impl FnOnce()) {
+pub fn show_header(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    is_loading: bool,
+    on_refresh: impl FnOnce(),
+) {
     ui.horizontal(|ui| {
         ui.heading("DiskOfflaner");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -24,4 +29,3 @@ pub fn show_header(ui: &mut egui::Ui, ctx: &egui::Context, is_loading: bool, on_
         });
     });
 }
-

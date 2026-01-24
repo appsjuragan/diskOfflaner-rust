@@ -1,3 +1,17 @@
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::borrow_as_ptr)]
+#![allow(clippy::ptr_as_ptr)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::cloned_instead_of_copied)]
+#![allow(clippy::ref_as_ptr)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::assigning_clones)]
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::cast_ptr_alignment)]
+#![allow(clippy::cast_possible_wrap)]
+
 use anyhow::Result;
 use std::ffi::OsStr;
 use std::io::Write;
@@ -197,7 +211,9 @@ fn get_disk_info_with_status(
                 .and_then(|s| s.chars().next())
                 .map(|c| c.to_ascii_uppercase().to_string());
             if let Some(sys) = system_drive_letter {
-                partitions.iter().any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
+                partitions
+                    .iter()
+                    .any(|p| p.drive_letter.eq_ignore_ascii_case(&sys))
             } else {
                 disk_number == 0
             }
@@ -422,13 +438,35 @@ pub fn unmount_partition(drive_letter: String) -> Result<()> {
     run_diskpart_script(&script)
 }
 
-pub fn mount_partition(disk_id: String, partition_number: u32) -> Result<()> {
+pub fn mount_partition(disk_id: String, partition_number: u32, letter: Option<char>) -> Result<()> {
     let disk_number = disk_id.parse::<u32>()?;
+    let assign_cmd = if let Some(l) = letter {
+        format!("assign letter={}", l)
+    } else {
+        "assign".to_string()
+    };
+
     let script = format!(
-        "select disk {}\nselect partition {}\nassign\nexit\n",
-        disk_number, partition_number
+        "select disk {}\nselect partition {}\n{}\nexit\n",
+        disk_number, partition_number, assign_cmd
     );
     run_diskpart_script(&script)
+}
+
+pub fn get_available_drive_letters() -> Vec<String> {
+    let mut available = Vec::new();
+    unsafe {
+        let drives_bitmask = winapi::um::fileapi::GetLogicalDrives();
+        // Skip A and B usually, but let's just list what's free from C to Z?
+        // Actually A and B are valid if free.
+        for i in 0..26 {
+            if (drives_bitmask & (1 << i)) == 0 {
+                let letter = (b'A' + i) as char;
+                available.push(letter.to_string());
+            }
+        }
+    }
+    available
 }
 
 fn run_diskpart_script(script: &str) -> Result<()> {
@@ -549,9 +587,8 @@ fn get_disk_type(disk_number: u32, _partitions: &Vec<PartitionInfo>) -> DiskType
         if success != 0 {
             if seek_penalty.IncursSeekPenalty == 0 {
                 return DiskType::SSD;
-            } else {
-                return DiskType::HDD;
             }
+            return DiskType::HDD;
         }
     }
 
@@ -607,7 +644,11 @@ fn get_system_disk_number() -> Option<u32> {
         }
 
         // volume_path is like "C:\"
-        let mut wide_volume: Vec<u16> = volume_path.iter().take_while(|&&c| c != 0).cloned().collect();
+        let mut wide_volume: Vec<u16> = volume_path
+            .iter()
+            .take_while(|&&c| c != 0)
+            .cloned()
+            .collect();
         // Remove trailing backslash for CreateFile
         if wide_volume.last() == Some(&(b'\\' as u16)) {
             wide_volume.pop();

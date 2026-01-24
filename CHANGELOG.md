@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.8] - 2026-01-23
+## [1.0.8] - 2026-01-24
 
 ### Added
+- **Partition Management**: Added Mount/Unmount buttons for all disk partitions.
+- **Drive Letter Selection**: Added a dialog to select a specific drive letter (or Auto) when mounting a partition.
 - **Unit Tests**: Added comprehensive unit tests for data structures (`DiskInfo`, `DiskType`, `PartitionInfo`).
 - **USB Auto-Refresh**: Automatically detects when USB drives are connected or disconnected.
   - Windows: Uses WM_DEVICECHANGE messages for instant detection.
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Application Icon**: Professional custom icon representing disk management.
 
 ### Changed
+- **UI Improvements**:
+  - Moved partition action buttons to the right for better alignment.
+  - Added distinct blue color for mounted partition labels.
+  - Disabled partition actions when the disk is offline.
+- **Error Handling**: Enhanced error messages for failed unmount operations (e.g., Pagefile, System Volume, In Use).
 - **Code Refactoring**: Centralized theme configuration into `src/gui/themes.rs` to eliminate duplication.
 - **Type Safety**: Improved `DiskAction` enum with named struct variants for clearer code intent.
 - **Maintainability**: Replaced magic numbers with named constants in Windows disk operations.

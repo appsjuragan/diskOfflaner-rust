@@ -4,6 +4,12 @@
 #![allow(clippy::map_unwrap_or)]
 #![allow(clippy::match_wildcard_for_single_variants)]
 #![allow(clippy::ref_as_ptr)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::semicolon_if_nothing_returned)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::borrow_as_ptr)]
 
 pub mod components;
 pub mod themes;
@@ -57,11 +63,72 @@ struct DiskApp {
     last_auto_refresh: Option<Instant>,
     #[allow(dead_code)]
     device_monitor_active: Arc<AtomicBool>,
+    // Mount Dialog State
+    mounting_partition: Option<(String, u32)>,
+    mount_letter_candidates: Vec<String>,
+    selected_mount_letter: String,
 }
 
 impl eframe::App for DiskApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.handle_background_updates(ctx);
+
+        // Mount Dialog
+        if let Some((disk_id, part_num)) = self.mounting_partition.clone() {
+            let mut open = true;
+            egui::Window::new("Mount Partition")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label("Select a drive letter for the new partition:");
+                    ui.add_space(5.0);
+
+                    egui::ComboBox::from_label("Drive Letter")
+                        .selected_text(&self.selected_mount_letter)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.selected_mount_letter,
+                                "Auto".to_string(),
+                                "Auto",
+                            );
+                            for letter in &self.mount_letter_candidates {
+                                ui.selectable_value(
+                                    &mut self.selected_mount_letter,
+                                    letter.clone(),
+                                    letter,
+                                );
+                            }
+                        });
+
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Mount").clicked() {
+                            let letter = if self.selected_mount_letter == "Auto" {
+                                None
+                            } else {
+                                self.selected_mount_letter.chars().next()
+                            };
+                            self.mounting_partition = None;
+                            self.start_partition_operation(
+                                disk_id.clone(),
+                                part_num,
+                                None,
+                                true,
+                                letter,
+                            );
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.mounting_partition = None;
+                        }
+                    });
+                });
+
+            if !open {
+                self.mounting_partition = None;
+            }
+        }
 
         // Processing Dialog
         if self.processing_disk.is_some() {
@@ -85,7 +152,11 @@ impl eframe::App for DiskApp {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(ctx, |ui| {
-                    ui.label(egui::RichText::new("You are about to set a SYSTEM/BOOT disk Offline!").color(egui::Color32::RED).strong());
+                    ui.label(
+                        egui::RichText::new("You are about to set a SYSTEM/BOOT disk Offline!")
+                            .color(egui::Color32::RED)
+                            .strong(),
+                    );
                     ui.label("This can cause system instability or crashes.");
                     ui.label("Are you absolutely sure you want to continue?");
                     ui.add_space(10.0);
@@ -171,12 +242,32 @@ impl eframe::App for DiskApp {
                         DiskAction::ConfirmSystemOffline { disk_id } => {
                             self.pending_offline_disk = Some(disk_id)
                         }
-                        DiskAction::MountPartition { disk_id, partition_number } => {
-                            self.start_partition_operation(disk_id, partition_number, None, true)
+                        DiskAction::MountPartition {
+                            disk_id,
+                            partition_number,
+                        } => {
+                            self.mounting_partition = Some((disk_id, partition_number));
+                            self.selected_mount_letter = "Auto".to_string();
+                            #[cfg(target_os = "windows")]
+                            {
+                                self.mount_letter_candidates =
+                                    crate::disk_operations::get_available_drive_letters();
+                            }
+                            #[cfg(not(target_os = "windows"))]
+                            {
+                                self.mount_letter_candidates = vec![];
+                            }
                         }
-                        DiskAction::UnmountPartition { disk_id, drive_letter } => {
-                            self.start_partition_operation(disk_id, 0, Some(drive_letter), false)
-                        }
+                        DiskAction::UnmountPartition {
+                            disk_id,
+                            drive_letter,
+                        } => self.start_partition_operation(
+                            disk_id,
+                            0,
+                            Some(drive_letter),
+                            false,
+                            None,
+                        ),
                     }
                 }
             });
@@ -230,15 +321,29 @@ impl DiskApp {
                     }
                     Err(e) => {
                         let err_lower = e.to_lowercase();
-                        if err_lower.contains("disk attributes may not be changed on the current system disk") {
+                        if err_lower.contains(
+                            "disk attributes may not be changed on the current system disk",
+                        ) {
                             self.operation_error = Some("Operation Failed: Cannot modify the system or boot disk.\n\nWindows prevents taking the drive running the OS offline to avoid a system crash.".to_string());
+                        } else if err_lower.contains("pagefile")
+                            || err_lower.contains("crashdump")
+                            || err_lower.contains("hibernation")
+                        {
+                            self.operation_error = Some("Operation Failed: This partition contains system files (Pagefile, Crashdump, or Hibernation file).\n\nWindows cannot unmount partitions that store these critical system files.".to_string());
+                        } else if err_lower.contains("system volume")
+                            || err_lower.contains("boot volume")
+                        {
+                            self.operation_error = Some("Operation Failed: This is a System or Boot partition.\n\nUnmounting it would cause the operating system to crash.".to_string());
                         } else if err_lower.contains("in use") {
-                            self.operation_error = Some("Operation Failed: Disk is currently in use.\n\nPlease close any applications or files using this drive and try again.".to_string());
+                            self.operation_error = Some("Operation Failed: The drive is currently in use.\n\nPlease close any applications (like File Explorer) or files using this drive and try again.".to_string());
                         } else if err_lower.contains("virtual disk service error") {
-                            let clean_err = e.lines()
+                            let clean_err = e
+                                .lines()
                                 .find(|l| l.to_lowercase().contains("virtual disk service error"))
                                 .map(|l| l.trim().to_string())
-                                .unwrap_or_else(|| "Unknown Virtual Disk Service Error".to_string());
+                                .unwrap_or_else(|| {
+                                    "Unknown Virtual Disk Service Error".to_string()
+                                });
                             self.operation_error = Some(format!("Operation Failed: {}", clean_err));
                         } else {
                             self.operation_error = Some(format!("Operation Failed: {}", e));
@@ -302,6 +407,7 @@ impl DiskApp {
         partition_number: u32,
         drive_letter: Option<String>,
         is_mount: bool,
+        mount_letter: Option<char>,
     ) {
         self.processing_disk = Some(disk_id.clone());
         let (tx, rx) = channel();
@@ -309,7 +415,15 @@ impl DiskApp {
 
         thread::spawn(move || {
             let result = if is_mount {
-                crate::disk_operations::mount_partition(disk_id, partition_number)
+                #[cfg(target_os = "windows")]
+                let r = crate::disk_operations::mount_partition(
+                    disk_id,
+                    partition_number,
+                    mount_letter,
+                );
+                #[cfg(not(target_os = "windows"))]
+                let r = crate::disk_operations::mount_partition(disk_id, partition_number);
+                r
             } else if let Some(letter) = drive_letter {
                 crate::disk_operations::unmount_partition(letter)
             } else {
@@ -331,13 +445,20 @@ fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Ar
         WS_OVERLAPPEDWINDOW,
     };
 
-    unsafe extern "system" fn window_proc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        use winapi::um::winuser::{GetWindowLongPtrW, SetWindowLongPtrW, CREATESTRUCTW, GWLP_USERDATA, WM_CREATE};
-        
+    unsafe extern "system" fn window_proc(
+        hwnd: HWND,
+        msg: UINT,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        use winapi::um::winuser::{
+            GetWindowLongPtrW, SetWindowLongPtrW, CREATESTRUCTW, GWLP_USERDATA, WM_CREATE,
+        };
+
         // WM_DEVICECHANGE wparam constants
         const DBT_DEVICEARRIVAL: usize = 0x8000;
         const DBT_DEVICEREMOVECOMPLETE: usize = 0x8004;
-        
+
         match msg {
             WM_CREATE => {
                 let create_struct = &*(lparam as *const CREATESTRUCTW);
@@ -376,8 +497,28 @@ fn monitor_device_changes_windows(tx: Sender<()>, ctx: egui::Context, active: Ar
         };
         RegisterClassW(&wc);
         let window_name: Vec<u16> = "DiskOfflaner Device Monitor\0".encode_utf16().collect();
-        let _hwnd = CreateWindowExW(0, class_name.as_ptr(), window_name.as_ptr(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), &tx as *const Sender<()> as *mut _);
-        let mut msg = MSG { hwnd: ptr::null_mut(), message: 0, wParam: 0, lParam: 0, time: 0, pt: std::mem::zeroed() };
+        let _hwnd = CreateWindowExW(
+            0,
+            class_name.as_ptr(),
+            window_name.as_ptr(),
+            WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &tx as *const Sender<()> as *mut _,
+        );
+        let mut msg = MSG {
+            hwnd: ptr::null_mut(),
+            message: 0,
+            wParam: 0,
+            lParam: 0,
+            time: 0,
+            pt: std::mem::zeroed(),
+        };
         while active.load(Ordering::Relaxed) && GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -395,7 +536,8 @@ fn monitor_device_changes_linux(tx: Sender<()>, ctx: egui::Context, active: Arc<
     if let Ok(entries) = fs::read_dir("/dev") {
         for entry in entries.flatten() {
             if let Ok(name) = entry.file_name().into_string() {
-                if name.starts_with("sd") || name.starts_with("nvme") || name.starts_with("mmcblk") {
+                if name.starts_with("sd") || name.starts_with("nvme") || name.starts_with("mmcblk")
+                {
                     previous_devices.insert(name);
                 }
             }
@@ -407,7 +549,10 @@ fn monitor_device_changes_linux(tx: Sender<()>, ctx: egui::Context, active: Arc<
         if let Ok(entries) = fs::read_dir("/dev") {
             for entry in entries.flatten() {
                 if let Ok(name) = entry.file_name().into_string() {
-                    if name.starts_with("sd") || name.starts_with("nvme") || name.starts_with("mmcblk") {
+                    if name.starts_with("sd")
+                        || name.starts_with("nvme")
+                        || name.starts_with("mmcblk")
+                    {
                         current_devices.insert(name);
                     }
                 }

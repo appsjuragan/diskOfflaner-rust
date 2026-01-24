@@ -1,7 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use anyhow::{Context, Result};
-use colored::*;
+use colored::Colorize;
 use std::env;
 use std::io::{self, Write};
 use std::mem;
@@ -111,6 +111,7 @@ fn toggle_disk(disk_id: String) -> Result<()> {
 #[allow(clippy::borrow_as_ptr)]
 #[allow(clippy::ptr_as_ptr)]
 #[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::ref_as_ptr)]
 fn is_elevated() -> bool {
     #[cfg(windows)]
     {
