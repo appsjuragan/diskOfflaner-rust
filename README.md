@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/appsjuragan/diskOfflaner-rust)
-[![Version](https://img.shields.io/badge/version-1.0.8-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.9-green.svg)](CHANGELOG.md)
 
 **Safe and simple disk management for Windows and Linux.**
 
@@ -14,6 +14,9 @@ DiskOfflaner is a cross-platform desktop application designed to manage the onli
 - **Visual Dashboard**: View all physical disks, models, sizes, and partition information in a clean layout
 - **Status Indicators**: Clear visual cues distinguish between Online (Green) and Offline (Red) drives
 - **One-Click Control**: Toggle disk status easily without complex command-line tools
+- **Partition Management**:
+  - **Mount/Unmount**: Easily mount or unmount individual partitions on any disk
+  - **Drive Letter Selection**: Choose specific drive letters when mounting partitions (Windows)
 - **USB Auto-Detection**: Automatically detects when USB drives are connected or disconnected
 - **Improved Disk Detection**: Accurately distinguishes between SSD, HDD, and NVMe drives on Windows using seek penalty checks
 - **Safety Mechanisms**:
@@ -59,7 +62,9 @@ sudo ./scripts/install_linux.sh
 - **Set Online**: Click the "Set Online" button to remount a disk
 - **Refresh**: Use the Refresh button in the top panel to update the list after connecting new hardware
 - **Theme**: Toggle between Light and Dark modes using the theme button in the header
-- **Partition Management**: View partition details and manage mount/unmount operations (Linux)
+- **Partition Management**: 
+  - Click "Unmount" to remove a drive letter from a partition
+  - Click "Mount" to assign a drive letter (you can choose a specific letter or let Windows decide)
 
 ## Building from Source
 
