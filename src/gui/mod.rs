@@ -196,7 +196,7 @@ impl eframe::App for DiskApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.set_enabled(self.processing_disk.is_none());
+            ui.set_enabled(self.processing_disk.is_none() && self.mounting_partition.is_none());
 
             if self.is_loading_disks {
                 ctx.request_repaint();
