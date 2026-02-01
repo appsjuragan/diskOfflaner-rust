@@ -10,7 +10,7 @@ fn main() {
             "Safe and simple disk management for Windows and Linux",
         );
         res.set("CompanyName", "Apps Juragan");
-        res.set("LegalCopyright", "Copyright (c) 2024");
+        res.set("LegalCopyright", "Copyright (c) 2026");
 
         if let Err(e) = res.compile() {
             eprintln!("Failed to compile resources: {e}");
