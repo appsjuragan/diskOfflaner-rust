@@ -3,7 +3,7 @@ fn main() {
     #[cfg(windows)]
     {
         let mut res = winres::WindowsResource::new();
-        res.set_icon("assets/icon.ico");
+        res.set_icon("assets/g1.ico");
         res.set("ProductName", "DiskOfflaner");
         res.set(
             "FileDescription",

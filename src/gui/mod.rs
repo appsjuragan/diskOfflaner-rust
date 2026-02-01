@@ -30,6 +30,7 @@ use components::{show_disk_card, show_footer, show_header, DiskAction};
 pub fn run_gui() -> Result<()> {
     let mut options = eframe::NativeOptions::default();
     options.viewport.inner_size = Some(egui::vec2(450.0, 600.0));
+    options.viewport.icon = load_icon().map(std::sync::Arc::new);
 
     eframe::run_native(
         &format!("DiskOfflaner v{}", env!("CARGO_PKG_VERSION")),
@@ -46,6 +47,19 @@ pub fn run_gui() -> Result<()> {
         }),
     )
     .map_err(|e| anyhow::anyhow!("GUI Error: {}", e))
+}
+
+fn load_icon() -> Option<egui::IconData> {
+    let icon_bytes = include_bytes!("../../assets/g1.png");
+    let image = image::load_from_memory(icon_bytes).ok()?;
+    let image = image.to_rgba8();
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+    Some(egui::IconData {
+        rgba,
+        width,
+        height,
+    })
 }
 
 #[derive(Default)]

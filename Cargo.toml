@@ -1,6 +1,6 @@
 [package]
 name = "diskofflaner"
-version = "1.0.9"
+version = "1.1.0"
 edition = "2021"
 
 [dependencies]
@@ -12,8 +12,8 @@ serde_json = "1.0.145"
 libc = "0.2.178"
 # Only include SVG loader instead of all_loaders to reduce binary size
 egui_extras = { version = "0.27", features = ["svg"] }
-# Remove unused image dependency
-# image = { version = "0.25", features = ["jpeg", "png"] }
+# Include image dependency for PNG icon loading
+image = { version = "0.25", features = ["png"] }
 
 
 [target.'cfg(windows)'.dependencies]
