@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, PartialEq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[allow(dead_code)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum DiskType {
@@ -24,7 +26,7 @@ impl std::fmt::Display for DiskType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub id: String,
     pub model: String,
@@ -33,9 +35,11 @@ pub struct DiskInfo {
     pub is_system_disk: bool,
     pub partitions: Vec<PartitionInfo>,
     pub disk_type: DiskType,
+    pub serial_number: Option<String>,
+    pub health_percentage: Option<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartitionInfo {
     pub partition_number: u32,
     pub size_bytes: u64,

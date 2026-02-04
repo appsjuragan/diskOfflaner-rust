@@ -1,0 +1,35 @@
+﻿cargo :     Checking wry v0.54.1
+At line:1 char:53
++ ... TH = "D:\projects\mingw64\bin;" + $env:PATH; cargo check 2>&1 | Out-F ...
++                                                  ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking wry v0.54.1:String) [], Re 
+   moteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Checking tauri-runtime v2.10.0
+   Compiling diskofflaner v2.0.0 (D:\projects\diskOfflaner-rust\src-tauri)
+error: failed to run custom build command for `diskofflaner v2.0.0 
+(D:\projects\diskOfflaner-rust\src-tauri)`
+
+Caused by:
+  process didn't exit successfully: `D:\projects\diskOfflaner-rust\src-tauri\target\d
+ebug\build\diskofflaner-96556d61615d3e2e\build-script-build` (exit code: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=TAURI_CONFIG
+  cargo:rustc-check-cfg=cfg(desktop)
+  cargo:rustc-cfg=desktop
+  cargo:rustc-check-cfg=cfg(mobile)
+  cargo:rerun-if-changed=D:\projects\diskOfflaner-rust\src-tauri\tauri.conf.json
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_APP_NAME=app
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_PREFIX=com_diskofflaner
+  cargo:rustc-check-cfg=cfg(dev)
+  cargo:rustc-cfg=dev
+  cargo:PERMISSION_FILES_PATH=D:\projects\diskOfflaner-rust\src-tauri\target\debug\bu
+ild\diskofflaner-ab9ec551fe1263fd\out\app-manifest\__app__-permission-files
+  cargo:rerun-if-changed=capabilities
+  cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+  cargo:rustc-env=TAURI_ENV_TARGET_TRIPLE=x86_64-pc-windows-gnu
+  package.metadata does not exist
+  `icons/icon.ico` not found; required for generating a Windows Resource file during 
+tauri-build
+warning: build failed, waiting for other jobs to finish...

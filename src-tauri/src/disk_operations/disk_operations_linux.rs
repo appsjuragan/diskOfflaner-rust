@@ -9,7 +9,7 @@ struct LsblkOutput {
     blockdevices: Vec<BlockDevice>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Debug, Deserialize)]
 struct BlockDevice {
     name: String,
     size: Option<u64>, // lsblk -b gives bytes
@@ -17,6 +17,8 @@ struct BlockDevice {
     device_type: Option<String>,
     mountpoint: Option<String>,
     model: Option<String>,
+    #[serde(rename = "serial")]
+    serial: Option<String>,
     state: Option<String>,
     rm: Option<String>,   // Removable flag
     rota: Option<String>, // Rotational (1 = HDD, 0 = SSD)
@@ -25,12 +27,12 @@ struct BlockDevice {
 }
 
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
-    // lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE,RM,ROTA,TRAN
+    // lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL,SERIAL,STATE,RM,ROTA,TRAN
     let output = Command::new("lsblk")
         .arg("-J") // JSON output
         .arg("-b") // Bytes
         .arg("-o")
-        .arg("NAME,SIZE,TYPE,MOUNTPOINT,MODEL,STATE,RM,ROTA,TRAN")
+        .arg("NAME,SIZE,TYPE,MOUNTPOINT,MODEL,SERIAL,STATE,RM,ROTA,TRAN")
         .output()?;
 
     if !output.status.success() {
@@ -87,6 +89,9 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
             is_system_disk,
             partitions,
             disk_type,
+            disk_type,
+            serial_number: device.serial,
+            health_percentage: None,
         });
     }
 

@@ -68,6 +68,13 @@ struct STORAGE_DEVICE_DESCRIPTOR {
 
 #[repr(C)]
 #[allow(non_snake_case)]
+struct STORAGE_DESCRIPTOR_HEADER {
+    Version: u32,
+    Size: u32,
+}
+
+#[repr(C)]
+#[allow(non_snake_case)]
 struct DEVICE_SEEK_PENALTY_DESCRIPTOR {
     Version: u32,
     Size: u32,
@@ -82,16 +89,101 @@ const BUS_TYPE_NVME: u32 = 17;
 const MAX_DISK_COUNT: u32 = 32;
 
 pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
+    // If running as admin, use the robust low-level method
+    if crate::utils::is_elevated() {
+        let mut disks = Vec::new();
+
+        // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
+        let disk_status_map = check_all_disks_online();
+
+        // Enumerate physical disks
+        for disk_num in 0..MAX_DISK_COUNT {
+            if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map) {
+                disks.push(disk_info);
+            }
+        }
+        return Ok(disks);
+    }
+
+    // Fallback for non-admin: Use PowerShell (Get-CimInstance)
+    enumerate_disks_powershell()
+}
+
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+struct Win32DiskDrive {
+    Index: u32,
+    Model: Option<String>,
+    Size: Option<u64>,
+    MediaType: Option<String>,
+    InterfaceType: Option<String>,
+    SerialNumber: Option<String>,
+    Status: Option<String>,
+}
+
+fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
 
-    // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
-    let disk_status_map = check_all_disks_online();
+    // Get-CimInstance Win32_DiskDrive | Select-Object Index,Model,Size,MediaType,InterfaceType,SerialNumber,Status | ConvertTo-Json
+    let output = Command::new("powershell")
+        .args(&[
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_DiskDrive | Select-Object Index,Model,Size,MediaType,InterfaceType,SerialNumber,Status | ConvertTo-Json"
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
 
-    // Enumerate physical disks
-    for disk_num in 0..MAX_DISK_COUNT {
-        if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map) {
-            disks.push(disk_info);
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.trim().is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Handle single object or array
+    let drives: Vec<Win32DiskDrive> = if stdout.trim().starts_with('[') {
+        serde_json::from_str(&stdout).unwrap_or_default()
+    } else {
+        match serde_json::from_str::<Win32DiskDrive>(&stdout) {
+            Ok(d) => vec![d],
+            Err(_) => vec![],
         }
+    };
+
+    for drive in drives {
+        let id = drive.Index.to_string();
+        let model = drive.Model.unwrap_or_else(|| format!("Disk {}", id));
+        let size_bytes = drive.Size.unwrap_or(0);
+        let interface_type = drive.InterfaceType.unwrap_or_default();
+        let media_type = drive.MediaType.unwrap_or_default();
+        let serial = drive.SerialNumber;
+        let status = drive.Status.unwrap_or_default(); // "OK"
+
+        // Guess type
+        let disk_type = if interface_type.contains("USB") || media_type.contains("External") {
+            DiskType::USBFlash
+        } else if interface_type.contains("NVMe") {
+            DiskType::NVMe
+        } else if media_type.to_lowercase().contains("ssd") {
+            DiskType::SSD
+        } else {
+            DiskType::HDD
+        };
+
+        disks.push(DiskInfo {
+            id: id.clone(),
+            model,
+            size_bytes,
+            is_online: true,
+            is_system_disk: id == "0",
+            partitions: vec![],
+            disk_type,
+            serial_number: serial,
+            health_percentage: if status == "OK" { Some(100) } else { Some(0) },
+        });
     }
 
     Ok(disks)
@@ -221,6 +313,8 @@ fn get_disk_info_with_status(
 
         // Determine disk type before moving partitions
         let disk_type = get_disk_type(disk_number, &partitions);
+        let serial_number = get_disk_serial(handle);
+        let health_percentage = get_disk_health(handle);
 
         CloseHandle(handle);
 
@@ -232,8 +326,114 @@ fn get_disk_info_with_status(
             is_system_disk,
             partitions,
             disk_type,
+            serial_number,
+            health_percentage,
         })
     }
+}
+
+const IOCTL_STORAGE_PREDICT_FAILURE: u32 = 0x002D_1140;
+
+#[repr(C)]
+#[allow(non_snake_case)]
+struct STORAGE_PREDICT_FAILURE {
+    PredictFailure: u32,
+    VendorSpecific: [u8; 512],
+}
+
+unsafe fn get_disk_health(handle: *mut winapi::ctypes::c_void) -> Option<u8> {
+    let mut predict_failure: STORAGE_PREDICT_FAILURE = mem::zeroed();
+    let mut bytes_returned = 0u32;
+
+    let success = DeviceIoControl(
+        handle,
+        IOCTL_STORAGE_PREDICT_FAILURE,
+        std::ptr::null_mut(),
+        0,
+        &mut predict_failure as *mut _ as *mut _,
+        mem::size_of::<STORAGE_PREDICT_FAILURE>() as u32,
+        &mut bytes_returned,
+        std::ptr::null_mut(),
+    );
+
+    if success != 0 {
+        // If PredictFailure is 0, disk is healthy (100%).
+        // If non-zero, disk is predicting failure (0% or low).
+        return Some(if predict_failure.PredictFailure == 0 {
+            100
+        } else {
+            10
+        });
+    }
+
+    // If the IOCTL fails, it might not support SMART or it's a USB drive.
+    // Try to be conservative and return None (Unknown).
+    None
+}
+
+// Extract serial number from STORAGE_DEVICE_DESCRIPTOR
+unsafe fn get_disk_serial(handle: *mut winapi::ctypes::c_void) -> Option<String> {
+    // We need to re-query for the full descriptor because the previous query (in get_disk_type)
+    // used a fixed size struct which might trigger buffer overflow if we try to read past it,
+    // or simply we need to do it here since handle is available.
+    // Actually, get_disk_type opens its own handle. Here we have a handle already.
+
+    let mut query = STORAGE_PROPERTY_QUERY {
+        PropertyId: STORAGE_DEVICE_PROPERTY,
+        QueryType: PROPERTY_STANDARD_QUERY,
+        AdditionalParameters: [0; 1],
+    };
+
+    // First call to get size
+    let mut header: STORAGE_DESCRIPTOR_HEADER = mem::zeroed();
+    let mut bytes_returned = 0u32;
+
+    let success = DeviceIoControl(
+        handle,
+        IOCTL_STORAGE_QUERY_PROPERTY,
+        &mut query as *mut _ as *mut _,
+        mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+        &mut header as *mut _ as *mut _,
+        mem::size_of::<STORAGE_DESCRIPTOR_HEADER>() as u32,
+        &mut bytes_returned,
+        std::ptr::null_mut(),
+    );
+
+    if success == 0 {
+        return None;
+    }
+
+    // Allocate full buffer
+    let mut buffer = vec![0u8; header.Size as usize];
+    let success = DeviceIoControl(
+        handle,
+        IOCTL_STORAGE_QUERY_PROPERTY,
+        &mut query as *mut _ as *mut _,
+        mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+        buffer.as_mut_ptr() as *mut _,
+        buffer.len() as u32,
+        &mut bytes_returned,
+        std::ptr::null_mut(),
+    );
+
+    if success == 0 {
+        return None;
+    }
+
+    let descriptor = &*(buffer.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR);
+
+    if descriptor.SerialNumberOffset != 0 {
+        let serial_cstr = std::ffi::CStr::from_ptr(
+            buffer
+                .as_ptr()
+                .offset(descriptor.SerialNumberOffset as isize) as *const i8,
+        );
+        if let Ok(serial) = serial_cstr.to_str() {
+            return Some(serial.trim().to_string());
+        }
+    }
+
+    None
 }
 
 // Helper to get all partitions using Drive Layout
