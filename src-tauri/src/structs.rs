@@ -46,3 +46,13 @@ pub struct PartitionInfo {
     pub drive_letter: String,
     pub partition_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub os_name: String,
+    pub os_version: String,
+    pub is_admin: bool,
+    pub total_disks: usize,
+    pub total_capacity_bytes: u64,
+    pub system_disk_id: Option<String>,
+}

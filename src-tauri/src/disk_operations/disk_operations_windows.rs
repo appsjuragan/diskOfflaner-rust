@@ -30,7 +30,7 @@ use winapi::um::winioctl::{
 use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ};
 // Removed unused PARTITION_INFORMATION_EX import
 
-use crate::structs::{DiskInfo, DiskType, PartitionInfo};
+use crate::structs::{DiskInfo, DiskType, PartitionInfo, SystemInfo};
 
 const OPEN_EXISTING: u32 = 3;
 
@@ -893,4 +893,54 @@ fn get_system_disk_number() -> Option<u32> {
         }
     }
     None
+}
+
+pub fn get_system_info() -> Result<SystemInfo> {
+    let disks = enumerate_disks()?;
+    let total_disks = disks.len();
+    let total_capacity_bytes = disks.iter().map(|d| d.size_bytes).sum();
+    let system_disk_id = disks
+        .iter()
+        .find(|d| d.is_system_disk)
+        .map(|d| d.id.clone());
+
+    let mut os_name = "Windows".to_string();
+    let mut os_version = "Unknown".to_string();
+
+    #[derive(serde::Deserialize)]
+    #[allow(non_snake_case)]
+    struct Win32OS {
+        Caption: String,
+        Version: String,
+    }
+
+    let output = Command::new("powershell")
+        .args(&[
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version | ConvertTo-Json"
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !stdout.trim().is_empty() {
+                if let Ok(os) = serde_json::from_str::<Win32OS>(&stdout) {
+                    os_name = os.Caption;
+                    os_version = os.Version;
+                }
+            }
+        }
+    }
+
+    Ok(SystemInfo {
+        os_name,
+        os_version,
+        is_admin: crate::utils::is_elevated(),
+        total_disks,
+        total_capacity_bytes,
+        system_disk_id,
+    })
 }

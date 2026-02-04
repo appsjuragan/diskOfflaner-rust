@@ -1,5 +1,5 @@
 // src/disk_operations/disk_operations_linux.rs
-use crate::structs::{DiskInfo, DiskType, PartitionInfo};
+use crate::structs::{DiskInfo, DiskType, PartitionInfo, SystemInfo};
 use anyhow::Result;
 use serde::Deserialize;
 use std::process::Command;
@@ -220,4 +220,23 @@ pub fn unmount_partition(mount_point: String) -> Result<()> {
         return Err(anyhow::anyhow!("Failed to unmount partition: {}", stderr));
     }
     Ok(())
+}
+
+pub fn get_system_info() -> Result<crate::structs::SystemInfo> {
+    let disks = enumerate_disks()?;
+    let total_disks = disks.len();
+    let total_capacity_bytes = disks.iter().map(|d| d.size_bytes).sum();
+    let system_disk_id = disks
+        .iter()
+        .find(|d| d.is_system_disk)
+        .map(|d| d.id.clone());
+
+    Ok(crate::structs::SystemInfo {
+        os_name: "Linux".to_string(),
+        os_version: "Unknown".to_string(),
+        is_admin: crate::utils::is_elevated(),
+        total_disks,
+        total_capacity_bytes,
+        system_disk_id,
+    })
 }

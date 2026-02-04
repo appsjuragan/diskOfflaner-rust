@@ -2,6 +2,7 @@ import { createSignal, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar from "./components/Sidebar";
 import DiskCard from "./components/DiskCard";
+import SystemInfo from "./components/SystemInfo";
 
 function App() {
   const [activePage, setActivePage] = createSignal("drives");
@@ -68,61 +69,9 @@ function App() {
             )}
           </div>
         )}
+
+        {activePage() === "info" && <SystemInfo />}
       </main>
-
-      <style jsx>{`
-        .app-container {
-          display: flex;
-          height: 100vh;
-          background-color: var(--bg-app);
-          color: var(--text-primary);
-        }
-
-        .main-content {
-          flex: 1;
-          padding: 32px 40px;
-          overflow-y: auto;
-          background-color: var(--bg-main);
-        }
-
-        .main-header {
-          margin-bottom: 32px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .main-title {
-          font-size: 32px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-
-        .refresh-btn {
-          padding: 8px 16px;
-          background: var(--bg-card);
-          border: 1px solid var(--border-card);
-          color: var(--text-primary);
-          border-radius: 8px;
-          transition: all 0.2s;
-        }
-
-        .refresh-btn:hover:not(:disabled) {
-          background: var(--bg-card-hover);
-        }
-
-        .disk-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-          gap: 24px;
-        }
-
-        @media (max-width: 879px) {
-          .disk-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </div>
   );
 }
