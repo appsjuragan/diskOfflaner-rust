@@ -67,6 +67,22 @@ fn get_available_drive_letters_command() -> Vec<String> {
     vec![]
 }
 
+#[tauri::command]
+fn open_file_explorer_command(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Not supported on this OS".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Check elevation
@@ -89,7 +105,8 @@ pub fn run() {
             mount_partition_command,
             unmount_partition_command,
             get_available_drive_letters_command,
-            get_system_info_command
+            get_system_info_command,
+            open_file_explorer_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

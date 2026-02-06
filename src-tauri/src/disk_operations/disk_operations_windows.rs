@@ -95,10 +95,11 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
 
         // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
         let disk_status_map = check_all_disks_online();
+        let disk_health_map = check_all_disks_health();
 
         // Enumerate physical disks
         for disk_num in 0..MAX_DISK_COUNT {
-            if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map) {
+            if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map, &disk_health_map) {
                 disks.push(disk_info);
             }
         }
@@ -261,10 +262,55 @@ fn check_all_disks_online() -> std::collections::HashMap<u32, bool> {
     status_map
 }
 
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+struct PsPhysicalDisk {
+    DeviceId: Option<String>,
+    HealthStatus: Option<String>,
+}
+
+fn check_all_disks_health() -> std::collections::HashMap<u32, u8> {
+    let mut map = std::collections::HashMap::new();
+    let output = Command::new("powershell")
+        .args(&["-NoProfile", "-Command", "Get-PhysicalDisk | Select-Object DeviceId, HealthStatus | ConvertTo-Json"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if !stdout.trim().is_empty() {
+                 let disks: Vec<PsPhysicalDisk> = if stdout.trim().starts_with('[') {
+                     serde_json::from_str(&stdout).unwrap_or_default()
+                 } else {
+                     serde_json::from_str::<PsPhysicalDisk>(&stdout).map(|d| vec![d]).unwrap_or_default()
+                 };
+
+                 for d in disks {
+                     if let (Some(id_str), Some(status)) = (d.DeviceId, d.HealthStatus) {
+                         // DeviceId is a string like "0", "1", etc.
+                         if let Ok(num) = id_str.parse::<u32>() {
+                             let score = match status.as_str() {
+                                 "Healthy" => 100,
+                                 "Warning" => 70,
+                                 "Unhealthy" => 20,
+                                 _ => 100, // Unknown/Other
+                             };
+                             map.insert(num, score);
+                         }
+                     }
+                 }
+            }
+        }
+    }
+    map
+}
+
 // Modified version of get_disk_info that uses cached status
 fn get_disk_info_with_status(
     disk_number: u32,
     status_map: &std::collections::HashMap<u32, bool>,
+    health_map: &std::collections::HashMap<u32, u8>,
 ) -> Result<DiskInfo> {
     let path = format!("\\\\.\\PhysicalDrive{}", disk_number);
     let wide_path: Vec<u16> = OsStr::new(&path).encode_wide().chain(once(0)).collect();
@@ -314,7 +360,10 @@ fn get_disk_info_with_status(
         // Determine disk type before moving partitions
         let disk_type = get_disk_type(disk_number, &partitions);
         let serial_number = get_disk_serial(handle);
-        let health_percentage = get_disk_health(handle);
+        
+        // Try IOCTL first, then PowerShell fallback (using cached map)
+        let health_percentage = get_disk_health(handle)
+            .or_else(|| health_map.get(&disk_number).copied());
 
         CloseHandle(handle);
 
@@ -341,6 +390,7 @@ struct STORAGE_PREDICT_FAILURE {
     VendorSpecific: [u8; 512],
 }
 
+// Primary health detection using IOCTL
 unsafe fn get_disk_health(handle: *mut winapi::ctypes::c_void) -> Option<u8> {
     let mut predict_failure: STORAGE_PREDICT_FAILURE = mem::zeroed();
     let mut bytes_returned = 0u32;
@@ -357,19 +407,67 @@ unsafe fn get_disk_health(handle: *mut winapi::ctypes::c_void) -> Option<u8> {
     );
 
     if success != 0 {
-        // If PredictFailure is 0, disk is healthy (100%).
-        // If non-zero, disk is predicting failure (0% or low).
-        return Some(if predict_failure.PredictFailure == 0 {
-            100
-        } else {
-            10
-        });
+        // Check PredictFailure flag first
+        if predict_failure.PredictFailure != 0 {
+            return Some(10); // Disk is predicting failure
+        }
+        
+        // Parse SMART attributes from VendorSpecific data
+        // Format: 2 bytes header + 30 attributes * 12 bytes each
+        let data = &predict_failure.VendorSpecific;
+        
+        // Track health indicators
+        let mut worst_health: Option<u8> = None;
+        
+        for i in 0..30 {
+            let offset = 2 + (i * 12);
+            if offset + 12 > data.len() {
+                break;
+            }
+            
+            let attr_id = data[offset];
+            if attr_id == 0 {
+                continue; // Empty attribute slot
+            }
+            
+            let current = data[offset + 3];
+            let _worst = data[offset + 4];
+            
+            // Key health attributes (normalized value, higher is better)
+            match attr_id {
+                // SSD Life indicators
+                0xE7 | // SSD Life Left (Samsung, SanDisk)
+                0xE9 | // Media Wearout Indicator (Intel)
+                0xAD | // Erase Count (Micron)
+                0xB1 | // Wear Range Delta
+                0xCA | // Percentage Used (some SSDs)
+                0xF1 | // Total LBAs Written
+                0x05   // Reallocated Sector Count
+                => {
+                    if current > 0 && current <= 100 {
+                        worst_health = Some(match worst_health {
+                            Some(h) => h.min(current),
+                            None => current,
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        // If we found health attributes, return the worst one
+        if let Some(h) = worst_health {
+            return Some(h);
+        }
+        
+        // No specific attributes found, but SMART passed
+        return Some(100);
     }
 
-    // If the IOCTL fails, it might not support SMART or it's a USB drive.
-    // Try to be conservative and return None (Unknown).
     None
 }
+
+
 
 // Extract serial number from STORAGE_DEVICE_DESCRIPTOR
 unsafe fn get_disk_serial(handle: *mut winapi::ctypes::c_void) -> Option<String> {
