@@ -59,7 +59,7 @@ function DiskCard(props) {
           <div class="icon-wrapper" style={{ color: getIconColor() }}>
             <Icon size={24} />
           </div>
-          <span class="disk-name" data-tooltip={props.disk.model}>Disk {props.disk.id}</span>
+          <span class="disk-name">Disk {props.disk.id} - {props.disk.model}</span>
         </div>
         {!isUsb() && (
           <button
@@ -80,7 +80,7 @@ function DiskCard(props) {
       <div class="card-body two-column">
         <div class="disk-info">
           <div class="info-row">
-            <span class="label">Model</span>
+            <span class="label">Type</span>
             <span class="value">{getDiskTypeLabel()}</span>
           </div>
           <div class="info-row">

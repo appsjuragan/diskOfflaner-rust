@@ -7,14 +7,44 @@ const SystemInfo = () => {
   const [disks, setDisks] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
 
+  const CACHE_KEY = "system_info_cache";
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
   const fetchInfo = async () => {
     try {
+      // Check cache first
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        try {
+          const { timestamp, sysInfo, disksList } = JSON.parse(cached);
+          if (Date.now() - timestamp < CACHE_DURATION) {
+            console.log("Using cached system info");
+            setInfo(sysInfo);
+            setDisks(disksList);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn("Invalid cache", e);
+        }
+      }
+
+      // Fetch fresh data if no cache or expired
       const [sysInfo, disksList] = await Promise.all([
         invoke("get_system_info_command"),
         invoke("enumerate_disks_command")
       ]);
+
       setInfo(sysInfo);
       setDisks(disksList);
+
+      // Update cache
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        timestamp: Date.now(),
+        sysInfo,
+        disksList
+      }));
+
     } catch (e) {
       console.error(e);
     } finally {
