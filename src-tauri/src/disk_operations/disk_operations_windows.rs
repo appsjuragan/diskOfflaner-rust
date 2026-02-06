@@ -93,16 +93,16 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     if crate::utils::is_elevated() {
         let mut disks = Vec::new();
 
-        // PARALELLIZE: Run diskpart and powershell health check in parallel
+        // PARALELLIZE: Run diskpart and powershell check in parallel
         let status_handle = std::thread::spawn(check_all_disks_online);
-        let health_handle = std::thread::spawn(check_all_disks_health);
+        let health_model_handle = std::thread::spawn(check_all_disks_health_and_model);
 
         let disk_status_map = status_handle.join().unwrap_or_default();
-        let disk_health_map = health_handle.join().unwrap_or_default();
+        let (disk_health_map, disk_model_map) = health_model_handle.join().unwrap_or_default();
 
         // Enumerate physical disks
         for disk_num in 0..MAX_DISK_COUNT {
-            if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map, &disk_health_map) {
+            if let Ok(disk_info) = get_disk_info_with_status(disk_num, &disk_status_map, &disk_health_map, &disk_model_map) {
                 disks.push(disk_info);
             }
         }
@@ -270,12 +270,15 @@ fn check_all_disks_online() -> std::collections::HashMap<u32, bool> {
 struct PsPhysicalDisk {
     DeviceId: Option<String>,
     HealthStatus: Option<String>,
+    FriendlyName: Option<String>,
 }
 
-fn check_all_disks_health() -> std::collections::HashMap<u32, u8> {
-    let mut map = std::collections::HashMap::new();
+fn check_all_disks_health_and_model() -> (std::collections::HashMap<u32, u8>, std::collections::HashMap<u32, String>) {
+    let mut health_map = std::collections::HashMap::new();
+    let mut model_map = std::collections::HashMap::new();
+
     let output = Command::new("powershell")
-        .args(&["-NoProfile", "-Command", "Get-PhysicalDisk | Select-Object DeviceId, HealthStatus | ConvertTo-Json"])
+        .args(&["-NoProfile", "-Command", "Get-PhysicalDisk | Select-Object DeviceId, HealthStatus, FriendlyName | ConvertTo-Json"])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
 
@@ -290,23 +293,29 @@ fn check_all_disks_health() -> std::collections::HashMap<u32, u8> {
                  };
 
                  for d in disks {
-                     if let (Some(id_str), Some(status)) = (d.DeviceId, d.HealthStatus) {
-                         // DeviceId is a string like "0", "1", etc.
+                     if let Some(id_str) = d.DeviceId {
                          if let Ok(num) = id_str.parse::<u32>() {
-                             let score = match status.as_str() {
-                                 "Healthy" => 100,
-                                 "Warning" => 70,
-                                 "Unhealthy" => 20,
-                                 _ => 100, // Unknown/Other
-                             };
-                             map.insert(num, score);
+                             // Health
+                             if let Some(status) = d.HealthStatus {
+                                 let score = match status.as_str() {
+                                     "Healthy" => 100,
+                                     "Warning" => 70,
+                                     "Unhealthy" => 20,
+                                     _ => 100,
+                                 };
+                                 health_map.insert(num, score);
+                             }
+                             // Model
+                             if let Some(name) = d.FriendlyName {
+                                 model_map.insert(num, name);
+                             }
                          }
                      }
                  }
             }
         }
     }
-    map
+    (health_map, model_map)
 }
 
 // Modified version of get_disk_info that uses cached status
@@ -314,6 +323,7 @@ fn get_disk_info_with_status(
     disk_number: u32,
     status_map: &std::collections::HashMap<u32, bool>,
     health_map: &std::collections::HashMap<u32, u8>,
+    model_map: &std::collections::HashMap<u32, String>,
 ) -> Result<DiskInfo> {
     let path = format!("\\\\.\\PhysicalDrive{}", disk_number);
     let wide_path: Vec<u16> = OsStr::new(&path).encode_wide().chain(once(0)).collect();
@@ -370,9 +380,16 @@ fn get_disk_info_with_status(
 
         CloseHandle(handle);
 
+        let ioctl_model = get_disk_model(handle);
+        let model = if ioctl_model == "Disk" {
+             model_map.get(&disk_number).cloned().unwrap_or(format!("Disk {}", disk_number))
+        } else {
+             ioctl_model
+        };
+
         Ok(DiskInfo {
             id: disk_number.to_string(),
-            model: get_disk_model(handle),
+            model,
             size_bytes,
             is_online,
             is_system_disk,
