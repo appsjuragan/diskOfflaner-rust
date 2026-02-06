@@ -1,142 +1,67 @@
-# DiskOfflaner
+# DiskOfflaner v2.0.0
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/appsjuragan/diskOfflaner-rust)
-[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](CHANGELOG.md)
+**Safe, Simple, and Reliable Disk Management for Windows.**
 
-**Safe and simple disk management for Windows and Linux.**
+DiskOfflaner is a modern utility built with **Rust** and **Tauri** designed to help you strictly control your physical drives. Easily mount, unmount, and toggle disks offline/online with a safety-first approach.
 
-DiskOfflaner is a cross-platform desktop application designed to manage the online/offline status of physical disk drives. It provides a safe, user-friendly interface for system administrators and power users to control disk availability without physical hardware manipulation.
+![DiskOfflaner Screenshot](https://raw.githubusercontent.com/AppsJuragan/diskofflaner/main/screenshot.png)
 
-## Features
+## 🚀 Features
 
-- **Visual Dashboard**: View all physical disks, models, sizes, and partition information in a clean layout
-- **Status Indicators**: Clear visual cues distinguish between Online (Green) and Offline (Red) drives
-- **One-Click Control**: Toggle disk status easily without complex command-line tools
-- **Partition Management**:
-  - **Mount/Unmount**: Easily mount or unmount individual partitions on any disk
-  - **Drive Letter Selection**: Choose specific drive letters when mounting partitions (Windows)
-- **USB Auto-Detection**: Automatically detects when USB drives are connected or disconnected
-- **Improved Disk Detection**: Accurately distinguishes between SSD, HDD, and NVMe drives on Windows using seek penalty checks
-- **Safety Mechanisms**:
-  - System Protection: Robust identification of critical boot/system disks using volume extents
-  - Confirmation: Requires explicit confirmation for sensitive operations
-  - Usage Detection: Prevents operations on drives that are currently in use to avoid data loss
-- **Modern Interface**: Includes both Dark and Light themes for comfortable usage in any environment
-- **Modular GUI**: Refactored component-based architecture for better maintainability and performance
-- **Cross-Platform**: Native support for Windows and Linux with platform-optimized disk operations
+- **🛡️ Safe Mode**: Prevent accidental data loss by requiring confirmation before critical actions (Offline, Unmount).
+- **🔌 Toggle Disk Status**: Instantly switch disks between **current Online** and **Offline** states.
+- **📂 Mount & Unmount**: Assign drive letters (Auto or Manual) and unmount partitions on the fly.
+- **📊 Detailed System Info**: View comprehensive hardware details including Model, Serial Number, and SMART health prediction.
+- **🎨 Modern UI**: Beautiful interface with **Dark/Light** themes, adjustable **Zoom**, and smooth animations.
+- **⚡ High Performance**: Built on Rust for near-instant startup and minimal resource usage.
 
-## System Requirements
+## 🛠️ Tech Stack
 
-### Windows
-- Windows 10 or Windows 11
-- Administrator privileges (required for disk management)
+- **Backend**: Rust (Tauri v2)
+- **Frontend**: SolidJS + Vite
+- **Styling**: Vanilla CSS (Variables & Glassmorphism)
+- **Icons**: Lucide Icons
 
-### Linux
-- Modern Linux Distribution (Ubuntu, Fedora, Arch, etc.)
-- Root/Sudo privileges (required for disk management)
-- `lsblk` utility (pre-installed on most distributions)
+## 📦 Installation
 
-## Getting Started
+Download the latest release from the [Releases Page](https://github.com/AppsJuragan/diskofflaner/releases).
 
-### Windows
-1. Download `diskofflaner.exe` from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
-2. Right-click the executable and select **Run as administrator**  
-3. The application will launch and scan your disks automatically
+**Portable**: No installation required. Just run `diskofflaner.exe`.
 
-### Linux
-1. Download the Linux binary from the [Releases](https://github.com/appsjuragan/diskOfflaner-rust/releases) page
-2. Make the file executable: `chmod +x diskofflaner`
-3. Run with privileges: `sudo ./diskofflaner`
+## 💻 Development
 
-Or install with icon support:
-```bash
-chmod +x scripts/install_linux.sh
-sudo ./scripts/install_linux.sh
-```
+### Prerequisites
+- [Rust](https://www.rust-lang.org/tools/install) (latest stable)
+- [Node.js](https://nodejs.org/) or [Bun](https://bun.sh/)
+- [Tauri CLI](https://tauri.app/v1/guides/getting-started/prerequisites)
 
-## Usage
+### Build from Source
 
-- **Set Offline**: Click the "Set Offline" button next to any active disk to safely disconnect it
-- **Set Online**: Click the "Set Online" button to remount a disk
-- **Refresh**: Use the Refresh button in the top panel to update the list after connecting new hardware
-- **Theme**: Toggle between Light and Dark modes using the theme button in the header
-- **Partition Management**: 
-  - Click "Unmount" to remove a drive letter from a partition
-  - Click "Mount" to assign a drive letter (you can choose a specific letter or let Windows decide)
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/AppsJuragan/diskofflaner.git
+    cd diskofflaner
+    ```
 
-## Building from Source
+2.  **Install dependencies**
+    ```bash
+    bun install
+    ```
 
-To build from source, ensure you have [Rust](https://www.rust-lang.org/tools/install) installed (version 1.80 or later recommended).
+3.  **Run in Development Mode**
+    ```bash
+    bun tauri dev
+    ```
 
-```bash
-# Clone the repository
-git clone https://github.com/appsjuragan/diskOfflaner-rust.git
+4.  **Build Release**
+    ```bash
+    bun tauri build --no-bundle
+    ```
 
-# Navigate to the project folder
-cd diskOfflaner-rust
+## 📝 License
 
-# Build the release version
-cargo build --release
-```
-
-**Output locations:**
-- Windows: `target/release/diskofflaner.exe`
-- Linux: `target/release/diskofflaner`
-
-### Development
-
-```bash
-# Format code
-cargo fmt --all
-
-# Run linter
-cargo clippy --all-targets --all-features
-
-# Run tests
-cargo test --all
-
-# Build and run in debug mode
-cargo run
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
-
-## Architecture
-
-DiskOfflaner is built with:
-- **Language**: Rust (2021 edition)
-- **GUI Framework**: egui/eframe for cross-platform native UI
-- **Platform Integration**: 
-  - Windows: WinAPI for IOCTL disk operations
-  - Linux: Direct system calls and `lsblk` integration
-
-## Important Notes
-
-⚠️ **Safety First**:
-- **Backups**: Always ensure you have backups before performing disk operations
-- **System Disks**: Avoid taking system or boot disks offline unless absolutely necessary
-- **Active Files**: Ensure no applications are actively reading from or writing to a disk before setting it offline
-- **Data Loss Prevention**: The application includes safeguards, but user discretion is essential
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/appsjuragan/diskOfflaner-rust/issues)
-- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/appsjuragan/diskOfflaner-rust/discussions)
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-Built with ❤️ and Rust for performance, safety, and reliability.
+**Author**: [AppsJuragan](https://github.com/AppsJuragan)

@@ -1,6 +1,7 @@
 pub mod disk_operations;
 pub mod structs;
 pub mod utils;
+pub mod logger;
 
 use crate::disk_operations::*;
 use crate::structs::{DiskInfo, SystemInfo};
@@ -33,12 +34,20 @@ fn enumerate_disks_command() -> Result<Vec<DiskInfo>, String> {
 
 #[tauri::command]
 fn set_disk_online_command(disk_id: String) -> Result<(), String> {
-    set_disk_online(disk_id).map_err(|e| e.to_string())
+    let res = set_disk_online(disk_id.clone()).map_err(|e| e.to_string());
+    if res.is_ok() {
+        logger::log_activity(&format!("Set Disk {} Online", disk_id));
+    }
+    res
 }
 
 #[tauri::command]
 fn set_disk_offline_command(disk_id: String) -> Result<(), String> {
-    set_disk_offline(disk_id).map_err(|e| e.to_string())
+    let res = set_disk_offline(disk_id.clone()).map_err(|e| e.to_string());
+    if res.is_ok() {
+        logger::log_activity(&format!("Set Disk {} Offline", disk_id));
+    }
+    res
 }
 
 #[tauri::command]
@@ -46,13 +55,32 @@ fn mount_partition_command(
     disk_id: String,
     partition_number: u32,
     letter: Option<char>,
-) -> Result<(), String> {
-    mount_partition(disk_id, partition_number, letter).map_err(|e| e.to_string())
+) -> Result<Option<char>, String> {
+    let res = mount_partition(disk_id.clone(), partition_number, letter).map_err(|e| e.to_string());
+    if let Ok(assigned) = &res {
+        let l_str = assigned.map(|c| format!(" to {}:\\", c)).unwrap_or_default();
+        logger::log_activity(&format!("Mounted Partition {} on Disk {}{}", partition_number, disk_id, l_str));
+    }
+    res
 }
 
 #[tauri::command]
 fn unmount_partition_command(volume_or_letter: String) -> Result<(), String> {
-    unmount_partition(volume_or_letter).map_err(|e| e.to_string())
+    let res = unmount_partition(volume_or_letter.clone()).map_err(|e| e.to_string());
+    if res.is_ok() {
+        logger::log_activity(&format!("Unmounted/Ejected Partition {}", volume_or_letter));
+    }
+    res
+}
+
+#[tauri::command]
+fn get_logs_command() -> Vec<String> {
+    logger::get_logs()
+}
+
+#[tauri::command]
+fn clear_logs_command() {
+    logger::clear_logs()
 }
 
 #[tauri::command]
@@ -106,8 +134,15 @@ pub fn run() {
             unmount_partition_command,
             get_available_drive_letters_command,
             get_system_info_command,
-            open_file_explorer_command
+            open_file_explorer_command,
+            get_logs_command,
+            clear_logs_command
         ])
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                std::process::exit(0);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -1,39 +1,62 @@
 :root {
   /* Color Palette - Dark Theme (Primary) */
-  --bg-app: #0f0f14;                    /* App background */
-  --bg-sidebar: #1a1a24;                /* Left sidebar */
-  --bg-main: #1e1e2e;                   /* Main content area */
-  --bg-card: rgba(45, 45, 60, 0.6);     /* Disk card background (semi-transparent) */
-  --bg-card-hover: rgba(55, 55, 70, 0.7); /* Card hover state */
-  --bg-sidebar-item: #2c2c3c;           /* Sidebar active item */
-  --bg-sidebar-item-hover: #34344a;     /* Sidebar hover */
+  --bg-app: #0f0f14;
+  /* App background */
+  --bg-sidebar: #1a1a24;
+  /* Left sidebar */
+  --bg-main: #1e1e2e;
+  /* Main content area */
+  --bg-card: rgba(45, 45, 60, 0.6);
+  /* Disk card background (semi-transparent) */
+  --bg-card-hover: rgba(55, 55, 70, 0.7);
+  /* Card hover state */
+  --bg-sidebar-item: #2c2c3c;
+  /* Sidebar active item */
+  --bg-sidebar-item-hover: #34344a;
+  /* Sidebar hover */
 
   /* Text Colors */
-  --text-primary: #ffffff;              /* Main headings, labels */
-  --text-secondary: #8b8b9a;            /* Secondary info (Model, Capacity labels) */
-  --text-tertiary: #6a6a7a;             /* Muted text */
-  --text-value: #e0e0e8;                /* Data values (right-aligned) */
+  --text-primary: #ffffff;
+  /* Main headings, labels */
+  --text-secondary: #8b8b9a;
+  /* Secondary info (Model, Capacity labels) */
+  --text-tertiary: #6a6a7a;
+  /* Muted text */
+  --text-value: #e0e0e8;
+  /* Data values (right-aligned) */
 
   /* Status Colors */
-  --status-online: #4ade80;             /* Green for ONLINE badge */
+  --status-online: #4ade80;
+  /* Green for ONLINE badge */
   --status-online-glow: rgba(74, 222, 128, 0.2);
-  --status-offline: #ef4444;            /* Red for OFFLINE badge */
+  --status-offline: #ef4444;
+  /* Red for OFFLINE badge */
   --status-offline-glow: rgba(239, 68, 68, 0.2);
-  --health-good: #4ade80;               /* 100% health */
-  --health-warning: #fbbf24;            /* 70-99% health */
-  --health-critical: #ef4444;           /* <70% health */
+  --health-good: #4ade80;
+  /* 100% health */
+  --health-warning: #fbbf24;
+  /* 70-99% health */
+  --health-critical: #ef4444;
+  /* <70% health */
 
   /* Accent Colors */
-  --accent-primary: #8b5cf6;            /* Purple accent (logo, icons) */
-  --accent-secondary: #6366f1;          /* Indigo accent */
-  --border-card: rgba(255, 255, 255, 0.1); /* Card borders */
+  --accent-primary: #8b5cf6;
+  /* Purple accent (logo, icons) */
+  --accent-secondary: #6366f1;
+  /* Indigo accent */
+  --border-card: rgba(255, 255, 255, 0.1);
+  /* Card borders */
   --border-sidebar: rgba(255, 255, 255, 0.05);
 
   /* Icon Colors (Disk Types) */
-  --icon-nvme: #8b5cf6;                 /* Purple tint */
-  --icon-ssd: #3b82f6;                  /* Blue tint */
-  --icon-hdd: #ef4444;                  /* Red tint for offline */
-  --icon-usb: #f59e0b;                  /* Orange tint */
+  --icon-nvme: #8b5cf6;
+  /* Purple tint */
+  --icon-ssd: #3b82f6;
+  /* Blue tint */
+  --icon-hdd: #ef4444;
+  /* Red tint for offline */
+  --icon-usb: #f59e0b;
+  /* Orange tint */
 
   /* Animations & Transitions */
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
@@ -48,19 +71,26 @@
 }
 
 [data-theme="light"] {
-  --bg-app: #f5f5f7;
-  --bg-sidebar: #ffffff;
-  --bg-main: #fafafa;
-  --bg-card: rgba(255, 255, 255, 0.8);
-  --bg-card-hover: rgba(255, 255, 255, 0.95);
-  --bg-sidebar-item: #e5e5e5;
-  --bg-sidebar-item-hover: #f0f0f0;
+  --bg-app: #e4e5e7;
+  /* Darker off-white app bg */
+  --bg-sidebar: #f1f2f5;
+  /* Soft gray sidebar */
+  --bg-main: #ecedf1;
+  /* Muted main content area */
+  --bg-card: rgba(255, 255, 255, 0.65);
+  /* Less bright cards */
+  --bg-card-hover: rgba(255, 255, 255, 0.9);
+  --bg-sidebar-item: #e2e4e8;
+  --bg-sidebar-item-hover: #e8eaed;
 
-  --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
-  --text-value: #333333;
-  
-  --border-card: rgba(0, 0, 0, 0.1);
+  --text-primary: #1f2937;
+  /* Softer charcoal black */
+  --text-secondary: #4b5563;
+  /* Softer gray text */
+  --text-tertiary: #9ca3af;
+  --text-value: #374151;
+
+  --border-card: rgba(0, 0, 0, 0.05);
+  /* Subtler borders */
   --border-sidebar: rgba(0, 0, 0, 0.05);
 }

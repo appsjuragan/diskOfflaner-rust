@@ -14,6 +14,7 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "now"] }
 # For Windows disk operations
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = [

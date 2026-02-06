@@ -121,18 +121,9 @@ function DiskCard(props) {
                     class={`partition-btn ${canEject() ? "eject" : "mounted"}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (canEject()) {
-                        props.onUnmount && props.onUnmount(props.disk.id, partition.drive_letter);
-                      } else {
-                        props.onOpenExplorer && props.onOpenExplorer(partition.drive_letter);
-                      }
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
                       props.onUnmount && props.onUnmount(props.disk.id, partition.drive_letter);
                     }}
-                    data-tooltip={canEject() ? "Safely Remove (Eject)" : "Open in Explorer (Right-click to Unmount)"}
+                    data-tooltip={canEject() ? "Safely Remove (Eject)" : "Unmount Drive"}
                   >
                     {canEject() ? "Eject" : "Mounted"}
                   </button>

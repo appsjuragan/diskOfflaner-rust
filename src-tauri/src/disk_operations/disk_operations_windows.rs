@@ -93,9 +93,12 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
     if crate::utils::is_elevated() {
         let mut disks = Vec::new();
 
-        // Get online status for ALL disks in a single diskpart call (OPTIMIZATION)
-        let disk_status_map = check_all_disks_online();
-        let disk_health_map = check_all_disks_health();
+        // PARALELLIZE: Run diskpart and powershell health check in parallel
+        let status_handle = std::thread::spawn(check_all_disks_online);
+        let health_handle = std::thread::spawn(check_all_disks_health);
+
+        let disk_status_map = status_handle.join().unwrap_or_default();
+        let disk_health_map = health_handle.join().unwrap_or_default();
 
         // Enumerate physical disks
         for disk_num in 0..MAX_DISK_COUNT {
@@ -369,7 +372,7 @@ fn get_disk_info_with_status(
 
         Ok(DiskInfo {
             id: disk_number.to_string(),
-            model: format!("Disk {}", disk_number),
+            model: get_disk_model(handle),
             size_bytes,
             is_online,
             is_system_disk,
@@ -468,6 +471,63 @@ unsafe fn get_disk_health(handle: *mut winapi::ctypes::c_void) -> Option<u8> {
 }
 
 
+
+// Extract model name from STORAGE_DEVICE_DESCRIPTOR
+unsafe fn get_disk_model(handle: *mut winapi::ctypes::c_void) -> String {
+    let mut query = STORAGE_PROPERTY_QUERY {
+        PropertyId: STORAGE_DEVICE_PROPERTY,
+        QueryType: PROPERTY_STANDARD_QUERY,
+        AdditionalParameters: [0],
+    };
+
+    let mut buffer = [0u8; 1024];
+    let mut bytes_returned = 0u32;
+
+    let success = DeviceIoControl(
+        handle,
+        IOCTL_STORAGE_QUERY_PROPERTY,
+        &mut query as *mut _ as *mut _,
+        mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+        buffer.as_mut_ptr() as *mut _,
+        buffer.len() as u32,
+        &mut bytes_returned,
+        std::ptr::null_mut(),
+    );
+
+    if success == 0 {
+        return format!("Disk"); // Fallback if IOCTL fails (will append ID later if needed, but usually won't match)
+    }
+
+    let descriptor = &*(buffer.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR);
+    
+    let get_string = |offset: u32| -> String {
+        if offset == 0 || offset as usize >= buffer.len() {
+            return String::new();
+        }
+        let start = offset as usize;
+        let mut end = start;
+        while end < buffer.len() && buffer[end] != 0 {
+            end += 1;
+        }
+        String::from_utf8_lossy(&buffer[start..end]).trim().to_string()
+    };
+
+    let vendor = get_string(descriptor.VendorIdOffset);
+    let product = get_string(descriptor.ProductIdOffset);
+    let _revision = get_string(descriptor.ProductRevisionOffset);
+
+    let full_name = if vendor.is_empty() {
+        product
+    } else {
+        format!("{} {}", vendor, product)
+    };
+
+    if full_name.trim().is_empty() {
+        format!("Disk")
+    } else {
+        full_name.trim().to_string()
+    }
+}
 
 // Extract serial number from STORAGE_DEVICE_DESCRIPTOR
 unsafe fn get_disk_serial(handle: *mut winapi::ctypes::c_void) -> Option<String> {
@@ -733,10 +793,11 @@ fn get_partition_on_disk(
 
 pub fn unmount_partition(drive_letter: String) -> Result<()> {
     let script = format!("select volume {}\nremove\nexit\n", drive_letter);
-    run_diskpart_script(&script)
+    let _ = run_diskpart_script_output(&script)?;
+    Ok(())
 }
 
-pub fn mount_partition(disk_id: String, partition_number: u32, letter: Option<char>) -> Result<()> {
+pub fn mount_partition(disk_id: String, partition_number: u32, letter: Option<char>) -> Result<Option<char>> {
     let disk_number = disk_id.parse::<u32>()?;
     let assign_cmd = if let Some(l) = letter {
         format!("assign letter={}", l)
@@ -745,10 +806,31 @@ pub fn mount_partition(disk_id: String, partition_number: u32, letter: Option<ch
     };
 
     let script = format!(
-        "select disk {}\nselect partition {}\n{}\nexit\n",
+        "select disk {}\nselect partition {}\n{}\ndetail partition\nexit\n",
         disk_number, partition_number, assign_cmd
     );
-    run_diskpart_script(&script)
+    
+    let output = run_diskpart_script_output(&script)?;
+    
+    // Parse the output to find the assigned letter
+    // detail partition shows a Volume table: "  Volume 2    G    Label ..."
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("* Volume") || (trimmed.starts_with("Volume") && line.contains("Partition")) {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            // If it starts with *, parts[0] is *, parts[2] is the letter
+            // If it doesn't, parts[0] is Volume, parts[2] is the letter
+            let ltr_idx = if trimmed.starts_with("*") { 2 } else { 2 };
+            if parts.len() > ltr_idx {
+                let ltr = parts[ltr_idx];
+                if ltr.len() == 1 && ltr.chars().next().unwrap().is_alphabetic() {
+                    return Ok(Some(ltr.chars().next().unwrap()));
+                }
+            }
+        }
+    }
+    
+    Ok(letter)
 }
 
 pub fn get_available_drive_letters() -> Vec<String> {
@@ -767,7 +849,7 @@ pub fn get_available_drive_letters() -> Vec<String> {
     available
 }
 
-fn run_diskpart_script(script: &str) -> Result<()> {
+fn run_diskpart_script_output(script: &str) -> Result<String> {
     let mut child = Command::new("diskpart")
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::piped())
@@ -780,12 +862,12 @@ fn run_diskpart_script(script: &str) -> Result<()> {
     }
 
     let output = child.wait_with_output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("Diskpart failed: {}\n{}", stdout, stderr));
     }
-    Ok(())
+    Ok(stdout)
 }
 
 pub fn set_disk_online(disk_id: String) -> Result<()> {
