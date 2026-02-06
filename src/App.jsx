@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal, onMount, onCleanup, createEffect } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { Moon, Sun, ZoomIn, ZoomOut, RotateCw } from "lucide-solid";
 import Sidebar from "./components/Sidebar";
@@ -12,16 +12,25 @@ import Settings from "./components/Settings";
 
 function App() {
   const [activePage, setActivePage] = createSignal("drives");
-  const [theme, setTheme] = createSignal("dark");
+
+  // Initialize state from local storage or defaults
+  const [theme, setTheme] = createSignal(localStorage.getItem("theme") || "dark");
+  const [zoomLevel, setZoomLevel] = createSignal(parseFloat(localStorage.getItem("zoomLevel")) || 1);
+  const [safeMode, setSafeMode] = createSignal(localStorage.getItem("safeMode") === "true"); // Default false
+  const [autoRefresh, setAutoRefresh] = createSignal(localStorage.getItem("autoRefresh") !== "false"); // Default true
+
   const [disks, setDisks] = createSignal([]);
   const [togglingDiskId, setTogglingDiskId] = createSignal(null);
   const [loading, setLoading] = createSignal(true);
-  const [zoomLevel, setZoomLevel] = createSignal(1);
   const [modal, setModal] = createSignal({ show: false, title: "", message: "", onConfirm: null, isDanger: false });
   const [pendingMount, setPendingMount] = createSignal(null);
   const [assignedLetters, setAssignedLetters] = createSignal(new Set());
-  const [safeMode, setSafeMode] = createSignal(false);
-  const [autoRefresh, setAutoRefresh] = createSignal(true);
+
+  // Persist settings to local storage when they change
+  createEffect(() => localStorage.setItem("theme", theme()));
+  createEffect(() => localStorage.setItem("zoomLevel", zoomLevel().toString()));
+  createEffect(() => localStorage.setItem("safeMode", safeMode().toString()));
+  createEffect(() => localStorage.setItem("autoRefresh", autoRefresh().toString()));
 
   const showConfirm = (config) => {
     setModal({ ...config, show: true });
