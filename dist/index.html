@@ -13,12 +13,60 @@
       margin: 0;
       padding: 0;
     }
+
+    /* Instant Preloader */
+    #initial-loader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #0f0f14;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 99999;
+      transition: opacity 0.3s ease-out;
+    }
+
+    #initial-loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #initial-loader .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #a855f7;
+      border-radius: 50%;
+      animation: spin 1s cubic-bezier(0.6, 0.2, 0.4, 0.8) infinite;
+    }
+
+    #initial-loader .text {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #9ca3af;
+      letter-spacing: 0.05em;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   </style>
-  <script type="module" crossorigin src="/assets/index-CN_Vubdr.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CRYZ-BWJ.css">
+  <script type="module" crossorigin src="/assets/index-DeC9ctq7.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-pBwiqUCn.css">
 </head>
 
 <body>
+  <div id="initial-loader">
+    <div class="spinner"></div>
+    <div class="text">Loading System Resources...</div>
+  </div>
   <div id="root"></div>
 </body>
 

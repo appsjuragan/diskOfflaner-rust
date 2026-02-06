@@ -11,7 +11,7 @@ function Sidebar(props) {
   return (
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="logo-icon"></div>
+        <img src="/g1.png" class="logo-img" alt="DiskOfflaner Logo" />
         <span class="logo-text">DiskOfflaner</span>
       </div>
 

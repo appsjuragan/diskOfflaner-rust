@@ -112,11 +112,11 @@
     margin-bottom: 32px;
 }
 
-.logo-icon {
+.logo-img {
     width: 32px;
     height: 32px;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
     border-radius: 8px;
+    object-fit: contain;
 }
 
 .logo-text {
