@@ -7,7 +7,7 @@ const SystemInfo = () => {
   const [disks, setDisks] = createSignal([]);
   const [loading, setLoading] = createSignal(true);
 
-  const CACHE_KEY = "system_info_cache";
+  const CACHE_KEY = "system_info_cache_v2";
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
   const fetchInfo = async () => {
@@ -19,6 +19,7 @@ const SystemInfo = () => {
           const { timestamp, sysInfo, disksList } = JSON.parse(cached);
           if (Date.now() - timestamp < CACHE_DURATION) {
             console.log("Using cached system info");
+            disksList.sort((a, b) => parseInt(a.id) - parseInt(b.id));
             setInfo(sysInfo);
             setDisks(disksList);
             setLoading(false);
@@ -34,6 +35,8 @@ const SystemInfo = () => {
         invoke("get_system_info_command"),
         invoke("enumerate_disks_command")
       ]);
+
+      disksList.sort((a, b) => parseInt(a.id) - parseInt(b.id));
 
       setInfo(sysInfo);
       setDisks(disksList);

@@ -178,6 +178,7 @@
     position: relative;
     overflow: hidden;
     zoom: var(--card-scale, 1);
+    user-select: none;
 }
 
 .disk-card:hover {
