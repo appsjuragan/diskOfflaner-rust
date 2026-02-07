@@ -40,10 +40,18 @@ function App() {
     setModal({ show: false, title: "", message: "", onConfirm: null, isDanger: false });
   };
 
+  const [isAdmin, setIsAdmin] = createSignal(false);
+
   const fetchDisks = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const result = await invoke("enumerate_disks_command");
+      const sysInfo = await invoke("get_system_info_command"); // Fetch admin status
+      setIsAdmin(sysInfo.is_admin);
+
+      // Sort disks by ID numerically
+      result.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
       if (!silent) console.log("Disks fetched:", result);
       setDisks(result);
     } catch (error) {
@@ -58,6 +66,7 @@ function App() {
       }
     }
   };
+
 
   const toggleDisk = async (disk) => {
     const action = async () => {
@@ -244,6 +253,7 @@ function App() {
             {disks().map((disk) => (
               <DiskCard
                 disk={disk}
+                isAdmin={isAdmin()}
                 onToggle={() => toggleDisk(disk)}
                 onMount={(diskId, partNum) => showMountModal(diskId, partNum)}
                 onUnmount={(diskId, letter) => unmountPartition(diskId, letter)}

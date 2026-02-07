@@ -61,12 +61,21 @@ function DiskCard(props) {
           </div>
           <span class="disk-name">Disk {props.disk.id} - {props.disk.model}</span>
         </div>
-        {!isUsb() && (
+        {!isUsb() && props.isAdmin && (
           <button
             class={`status-badge ${props.disk.is_online ? "online" : "offline"}`}
-            disabled={props.isToggling || props.isAnyToggling}
-            onClick={(e) => { e.stopPropagation(); props.onToggle && props.onToggle(); }}
-            data-tooltip={props.disk.is_online ? "Click to set Offline" : "Click to set Online"}
+            disabled={props.isToggling || props.isAnyToggling || !props.isAdmin}
+            style={!props.isAdmin ? { opacity: 1, cursor: "default" } : {}}
+            onClick={(e) => {
+              if (!props.isAdmin) return;
+              e.stopPropagation();
+              props.onToggle && props.onToggle();
+            }}
+            data-tooltip={
+              !props.isAdmin
+                ? "Administrator privileges required"
+                : (props.disk.is_online ? "Click to set Offline" : "Click to set Online")
+            }
           >
             {props.isToggling ? (
               <div class="spinner"></div>
@@ -74,6 +83,13 @@ function DiskCard(props) {
               props.disk.is_online ? "ONLINE" : "OFFLINE"
             )}
           </button>
+        )}
+        {!isUsb() && !props.isAdmin && (
+          <div class={`status-badge ${props.disk.is_online ? "online" : "offline"}`}
+            style={{ opacity: 1, cursor: "not-allowed" }}
+            data-tooltip="Administrator privileges required">
+            {props.disk.is_online ? "ONLINE" : "OFFLINE"}
+          </div>
         )}
       </header>
 
@@ -117,28 +133,32 @@ function DiskCard(props) {
                   [{partition.drive_letter || "?"}:\] - {formatBytes(partition.size_bytes)}
                 </span>
                 {partition.drive_letter ? (
-                  <button
-                    class={`partition-btn ${canEject() ? "eject" : "mounted"}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onUnmount && props.onUnmount(props.disk.id, partition.drive_letter);
-                    }}
-                    data-tooltip={canEject() ? "Safely Remove (Eject)" : "Unmount Drive"}
-                  >
-                    {canEject() ? "Eject" : "Mounted"}
-                  </button>
+                  (canEject() || props.isAdmin) && (
+                    <button
+                      class={`partition-btn ${canEject() ? "eject" : "mounted"}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onUnmount && props.onUnmount(props.disk.id, partition.drive_letter);
+                      }}
+                      data-tooltip={canEject() ? "Safely Remove (Eject)" : "Unmount Drive"}
+                    >
+                      {canEject() ? "Eject" : "Mounted"}
+                    </button>
+                  )
                 ) : (
-                  <button
-                    class="partition-btn unmounted"
-                    disabled={props.isAnyToggling || !props.disk.is_online}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onMount && props.onMount(props.disk.id, partition.partition_number);
-                    }}
-                    data-tooltip={props.disk.is_online ? "Click to mount" : "Disk is offline"}
-                  >
-                    Mount
-                  </button>
+                  props.isAdmin && (
+                    <button
+                      class="partition-btn unmounted"
+                      disabled={props.isAnyToggling || !props.disk.is_online}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onMount && props.onMount(props.disk.id, partition.partition_number);
+                      }}
+                      data-tooltip={props.disk.is_online ? "Click to mount" : "Disk is offline"}
+                    >
+                      Mount
+                    </button>
+                  )
                 )}
               </div>
             ))

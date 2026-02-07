@@ -128,7 +128,7 @@ struct Win32DiskDrive {
 fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
 
-    // Get-CimInstance Win32_DiskDrive | Select-Object Index,Model,Size,MediaType,InterfaceType,SerialNumber,Status | ConvertTo-Json
+    // Fetch disk drives
     let output = Command::new("powershell")
         .args(&[
             "-NoProfile",
@@ -157,6 +157,9 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
         }
     };
 
+    // Fetch partitions via PowerShell (works without admin)
+    let partitions_map = get_partitions_powershell();
+
     for drive in drives {
         let id = drive.Index.to_string();
         let model = drive.Model.unwrap_or_else(|| format!("Disk {}", id));
@@ -177,13 +180,16 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
             DiskType::HDD
         };
 
+        // Get partitions for this disk
+        let partitions = partitions_map.get(&drive.Index).cloned().unwrap_or_default();
+
         disks.push(DiskInfo {
             id: id.clone(),
             model,
             size_bytes,
             is_online: true,
             is_system_disk: id == "0",
-            partitions: vec![],
+            partitions,
             disk_type,
             serial_number: serial,
             health_percentage: if status == "OK" { Some(100) } else { Some(0) },
@@ -191,6 +197,62 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
     }
 
     Ok(disks)
+}
+
+// PowerShell-based partition enumeration using Get-Partition (more robust for drive letters)
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+struct PsPartition {
+    DiskNumber: u32,
+    PartitionNumber: u32,
+    DriveLetter: Option<char>, // "C", "D", or null
+    Size: Option<u64>,
+}
+
+fn get_partitions_powershell() -> std::collections::HashMap<u32, Vec<PartitionInfo>> {
+    let mut result: std::collections::HashMap<u32, Vec<PartitionInfo>> = std::collections::HashMap::new();
+
+    // Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size | ConvertTo-Json
+    let output = Command::new("powershell")
+        .args(&[
+            "-NoProfile",
+            "-Command",
+            "Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size | ConvertTo-Json"
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    let ps_partitions: Vec<PsPartition> = match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.trim().starts_with('[') {
+                serde_json::from_str(&stdout).unwrap_or_default()
+            } else {
+                match serde_json::from_str::<PsPartition>(&stdout) {
+                    Ok(p) => vec![p],
+                    Err(_) => vec![],
+                }
+            }
+        }
+        _ => vec![],
+    };
+
+    for p in ps_partitions {
+        let drive_letter = match p.DriveLetter {
+            Some(c) if c != '\0' && c != ' ' => c.to_string(),
+            _ => String::new(),
+        };
+
+        let partition_info = PartitionInfo {
+            partition_number: p.PartitionNumber,
+            size_bytes: p.Size.unwrap_or(0),
+            drive_letter,
+            partition_id: format!("{}:{}", p.DiskNumber, p.PartitionNumber), // Use unique ID for key
+        };
+        result.entry(p.DiskNumber).or_insert_with(Vec::new).push(partition_info);
+    }
+
+    result
 }
 
 fn get_disk_size(handle: *mut winapi::ctypes::c_void) -> Result<u64> {
