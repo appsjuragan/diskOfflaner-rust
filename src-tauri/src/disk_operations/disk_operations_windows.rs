@@ -128,7 +128,7 @@ struct Win32DiskDrive {
 fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
     let mut disks = Vec::new();
 
-    // Fetch disk drives
+    // Fetch disk drives from Win32_DiskDrive (model, serial, size)
     let output = Command::new("powershell")
         .args(&[
             "-NoProfile",
@@ -157,27 +157,58 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
         }
     };
 
+    // Fetch Get-Disk for BusType and IsOffline (accurate type and status detection)
+    let disk_status_map = get_disk_status_powershell();
+
     // Fetch partitions via PowerShell (works without admin)
     let partitions_map = get_partitions_powershell();
 
     for drive in drives {
         let id = drive.Index.to_string();
-        let model = drive.Model.unwrap_or_else(|| format!("Disk {}", id));
+        let model_str = drive.Model.clone().unwrap_or_else(|| format!("Disk {}", id));
         let size_bytes = drive.Size.unwrap_or(0);
-        let interface_type = drive.InterfaceType.unwrap_or_default();
-        let media_type = drive.MediaType.unwrap_or_default();
         let serial = drive.SerialNumber;
-        let status = drive.Status.unwrap_or_default(); // "OK"
+        let status = drive.Status.unwrap_or_default();
 
-        // Guess type
-        let disk_type = if interface_type.contains("USB") || media_type.contains("External") {
-            DiskType::USBFlash
-        } else if interface_type.contains("NVMe") {
-            DiskType::NVMe
-        } else if media_type.to_lowercase().contains("ssd") {
-            DiskType::SSD
+        // Use Get-Disk data if available, otherwise fallback to heuristics
+        let (is_online, disk_type) = if let Some((offline, bus_type)) = disk_status_map.get(&drive.Index) {
+            let dtype = match bus_type.as_str() {
+                "NVMe" => DiskType::NVMe,
+                "USB" => DiskType::USBFlash,
+                "SATA" | "ATA" => {
+                    // Check model for SSD hints
+                    if model_str.to_lowercase().contains("ssd") {
+                        DiskType::SSD
+                    } else {
+                        DiskType::HDD
+                    }
+                }
+                _ => {
+                    // Fallback: check model name
+                    if model_str.to_lowercase().contains("nvme") {
+                        DiskType::NVMe
+                    } else if model_str.to_lowercase().contains("ssd") {
+                        DiskType::SSD
+                    } else {
+                        DiskType::HDD
+                    }
+                }
+            };
+            (!*offline, dtype)
         } else {
-            DiskType::HDD
+            // Fallback if Get-Disk failed for this disk
+            let interface_type = drive.InterfaceType.unwrap_or_default();
+            let media_type = drive.MediaType.unwrap_or_default();
+            let dtype = if interface_type.contains("USB") || media_type.contains("External") {
+                DiskType::USBFlash
+            } else if model_str.to_lowercase().contains("nvme") {
+                DiskType::NVMe
+            } else if model_str.to_lowercase().contains("ssd") {
+                DiskType::SSD
+            } else {
+                DiskType::HDD
+            };
+            (true, dtype) // Assume online if we can't determine
         };
 
         // Get partitions for this disk
@@ -185,9 +216,9 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
 
         disks.push(DiskInfo {
             id: id.clone(),
-            model,
+            model: model_str,
             size_bytes,
-            is_online: true,
+            is_online,
             is_system_disk: id == "0",
             partitions,
             disk_type,
@@ -197,6 +228,49 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
     }
 
     Ok(disks)
+}
+
+// Fetch disk status (IsOffline, BusType) via Get-Disk cmdlet
+#[derive(serde::Deserialize)]
+#[allow(non_snake_case)]
+struct PsDiskStatus {
+    Number: u32,
+    IsOffline: bool,
+    BusType: Option<String>,
+}
+
+fn get_disk_status_powershell() -> std::collections::HashMap<u32, (bool, String)> {
+    let mut result = std::collections::HashMap::new();
+
+    let output = Command::new("powershell")
+        .args(&[
+            "-NoProfile",
+            "-Command",
+            "Get-Disk | Select-Object Number, IsOffline, BusType | ConvertTo-Json"
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    let statuses: Vec<PsDiskStatus> = match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if stdout.trim().starts_with('[') {
+                serde_json::from_str(&stdout).unwrap_or_default()
+            } else {
+                match serde_json::from_str::<PsDiskStatus>(&stdout) {
+                    Ok(s) => vec![s],
+                    Err(_) => vec![],
+                }
+            }
+        }
+        _ => vec![],
+    };
+
+    for s in statuses {
+        result.insert(s.Number, (s.IsOffline, s.BusType.unwrap_or_default()));
+    }
+
+    result
 }
 
 // PowerShell-based partition enumeration using Get-Partition (more robust for drive letters)
