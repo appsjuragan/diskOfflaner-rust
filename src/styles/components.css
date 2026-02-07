@@ -242,6 +242,8 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    min-width: 80px;
+    text-align: center;
 }
 
 .status-badge.online {
@@ -381,6 +383,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 80px;
 }
 
 .partition-btn.mounted {
