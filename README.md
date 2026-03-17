@@ -1,4 +1,4 @@
-# DiskOfflaner v2.0.0
+# DiskOfflaner v2.1.0
 
 **Safe, Simple, and Reliable Disk Management for Windows.**
 
@@ -9,10 +9,16 @@ DiskOfflaner is a modern utility built with **Rust** and **Tauri** designed to h
 ## 🚀 Features
 
 - **🛡️ Safe Mode**: Prevent accidental data loss by requiring confirmation before critical actions (Offline, Unmount).
-- **🔌 Toggle Disk Status**: Instantly switch disks between **current Online** and **Offline** states.
+- **📈 Disk Usage Bar**: Visual representation of disk usage with dynamic color thresholds:
+  - 🟢 **0-65%**: Healthy (Green)
+  - 🟠 **66-80%**: Warning (Orange)
+  - 🔴 **81-100%**: Critical (Red)
+- **🔌 Toggle Disk Status**: Instantly switch disks between **Online** and **Offline** states.
 - **📂 Mount & Unmount**: Assign drive letters (Auto or Manual) and unmount partitions on the fly.
 - **📊 Detailed System Info**: View comprehensive hardware details including Model, Serial Number, and SMART health prediction.
 - **🎨 Modern UI**: Beautiful interface with **Dark/Light** themes, adjustable **Zoom**, and smooth animations.
+- **✨ Premium Aesthetics**: Refined Light Theme with sleek shadows, gradients, and polished components.
+- **⚡ High Performance**: Built on Rust for near-instant startup and minimal resource usage.
 - **⚡ High Performance**: Built on Rust for near-instant startup and minimal resource usage.
 
 ## 🛠️ Tech Stack

@@ -74,6 +74,7 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
                     partitions.push(PartitionInfo {
                         partition_number: (i + 1) as u32,
                         size_bytes: child.size.unwrap_or(0),
+                        used_bytes: None, // Logic for used_bytes on Linux can be added later
                         drive_letter: mountpoint, // Using drive_letter field for mountpoint
                         partition_id: child.name, // Using partition_id for device name (e.g. sda1)
                     });
@@ -89,9 +90,9 @@ pub fn enumerate_disks() -> Result<Vec<DiskInfo>> {
             is_system_disk,
             partitions,
             disk_type,
-            disk_type,
             serial_number: device.serial,
             health_percentage: None,
+            usage_percentage: None,
         });
     }
 

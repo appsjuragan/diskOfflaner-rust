@@ -214,6 +214,24 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
         // Get partitions for this disk
         let partitions = partitions_map.get(&drive.Index).cloned().unwrap_or_default();
 
+        let mut total_used_bytes: u64 = 0;
+        let mut total_part_size_bytes: u64 = 0;
+        let mut has_usage = false;
+
+        for p in &partitions {
+            if let Some(used) = p.used_bytes {
+                total_used_bytes += used;
+                total_part_size_bytes += p.size_bytes;
+                has_usage = true;
+            }
+        }
+
+        let usage_percentage = if has_usage && total_part_size_bytes > 0 {
+            Some((total_used_bytes as f64 / total_part_size_bytes as f64) * 100.0)
+        } else {
+            None
+        };
+
         disks.push(DiskInfo {
             id: id.clone(),
             model: model_str,
@@ -224,6 +242,7 @@ fn enumerate_disks_powershell() -> Result<Vec<DiskInfo>> {
             disk_type,
             serial_number: serial,
             health_percentage: if status == "OK" { Some(100) } else { Some(0) },
+            usage_percentage,
         });
     }
 
@@ -281,17 +300,18 @@ struct PsPartition {
     PartitionNumber: u32,
     DriveLetter: Option<char>, // "C", "D", or null
     Size: Option<u64>,
+    FreeSpace: Option<u64>,
 }
 
 fn get_partitions_powershell() -> std::collections::HashMap<u32, Vec<PartitionInfo>> {
     let mut result: std::collections::HashMap<u32, Vec<PartitionInfo>> = std::collections::HashMap::new();
 
-    // Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size | ConvertTo-Json
+    // Fetch partitions and their associated volumes for free space data
     let output = Command::new("powershell")
         .args(&[
             "-NoProfile",
             "-Command",
-            "Get-Partition | Select-Object DiskNumber, PartitionNumber, DriveLetter, Size | ConvertTo-Json"
+            "Get-Partition | ForEach-Object { $p = $_; $v = $p | Get-Volume -ErrorAction SilentlyContinue; [PSCustomObject]@{ DiskNumber=$p.DiskNumber; PartitionNumber=$p.PartitionNumber; DriveLetter=$p.DriveLetter; Size=$p.Size; FreeSpace=$v.SizeRemaining } } | ConvertTo-Json"
         ])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
@@ -299,7 +319,9 @@ fn get_partitions_powershell() -> std::collections::HashMap<u32, Vec<PartitionIn
     let ps_partitions: Vec<PsPartition> = match output {
         Ok(out) if out.status.success() => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            if stdout.trim().starts_with('[') {
+            if stdout.trim().is_empty() {
+                vec![]
+            } else if stdout.trim().starts_with('[') {
                 serde_json::from_str(&stdout).unwrap_or_default()
             } else {
                 match serde_json::from_str::<PsPartition>(&stdout) {
@@ -317,11 +339,18 @@ fn get_partitions_powershell() -> std::collections::HashMap<u32, Vec<PartitionIn
             _ => String::new(),
         };
 
+        let used_bytes = if let (Some(size), Some(free)) = (p.Size, p.FreeSpace) {
+            Some(size.saturating_sub(free))
+        } else {
+            None
+        };
+
         let partition_info = PartitionInfo {
             partition_number: p.PartitionNumber,
             size_bytes: p.Size.unwrap_or(0),
+            used_bytes,
             drive_letter,
-            partition_id: format!("{}:{}", p.DiskNumber, p.PartitionNumber), // Use unique ID for key
+            partition_id: format!("{}:{}", p.DiskNumber, p.PartitionNumber),
         };
         result.entry(p.DiskNumber).or_insert_with(Vec::new).push(partition_info);
     }
@@ -514,6 +543,23 @@ fn get_disk_info_with_status(
         let health_percentage = get_disk_health(handle)
             .or_else(|| health_map.get(&disk_number).copied());
 
+        // Calculate usage percentage
+        let mut total_used: u64 = 0;
+        let mut total_size: u64 = 0;
+        let mut has_usage = false;
+        for p in &partitions {
+            if let Some(used) = p.used_bytes {
+                total_used += used;
+                total_size += p.size_bytes;
+                has_usage = true;
+            }
+        }
+        let usage_percentage = if has_usage && total_size > 0 {
+            Some((total_used as f64 / total_size as f64) * 100.0)
+        } else {
+            None
+        };
+
         CloseHandle(handle);
 
         let ioctl_model = get_disk_model(handle);
@@ -533,6 +579,7 @@ fn get_disk_info_with_status(
             disk_type,
             serial_number,
             health_percentage,
+            usage_percentage,
         })
     }
 }
@@ -815,6 +862,7 @@ fn get_partitions_layout(disk_number: u32) -> Result<Vec<PartitionInfo>> {
                 partitions.push(PartitionInfo {
                     partition_number: number,
                     size_bytes: length,
+                    used_bytes: None,
                     drive_letter: String::new(),           // Filled later
                     partition_id: format!("{:X}", offset), // Use Offset as ID for matching
                 });
@@ -844,7 +892,7 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
                 if let Ok(info) = get_partition_on_disk(&volume_path, disk_number, &drive_letter) {
                     // info.partition_id holds the offset in Hex
                     if let Ok(offset) = u64::from_str_radix(&info.partition_id, 16) {
-                        mounted_map.insert(offset, drive_letter);
+                        mounted_map.insert(offset, (drive_letter, info.used_bytes));
                     }
                 }
             }
@@ -854,8 +902,9 @@ fn get_partitions(disk_number: u32) -> Result<Vec<PartitionInfo>> {
     // 3. Merge Drive Letters
     for part in &mut partitions {
         if let Ok(offset) = u64::from_str_radix(&part.partition_id, 16) {
-            if let Some(letter) = mounted_map.get(&offset) {
+            if let Some((letter, used)) = mounted_map.get(&offset) {
                 part.drive_letter = letter.clone();
+                part.used_bytes = *used;
             }
         }
     }
@@ -935,9 +984,27 @@ fn get_partition_on_disk(
             return Err(anyhow::anyhow!("Wrong disk"));
         }
 
+        // Fetch used bytes
+        let mut used_bytes: Option<u64> = None;
+        let root_path = format!("{}:\\", drive_letter);
+        let wide_root: Vec<u16> = OsStr::new(&root_path).encode_wide().chain(once(0)).collect();
+        let mut free_avail = 0i64;
+        let mut total = 0i64;
+        let mut total_free = 0i64;
+
+        if winapi::um::fileapi::GetDiskFreeSpaceExW(
+            wide_root.as_ptr(),
+            &mut free_avail as *mut _ as *mut _,
+            &mut total as *mut _ as *mut _,
+            &mut total_free as *mut _ as *mut _,
+        ) != 0 {
+            used_bytes = Some((total as u64).saturating_sub(total_free as u64));
+        }
+
         Ok(PartitionInfo {
             partition_number: 0,
             size_bytes: *extent.ExtentLength.QuadPart() as u64,
+            used_bytes,
             drive_letter: drive_letter.to_string(),
             partition_id: format!("{:X}", extent.StartingOffset.QuadPart()),
         })

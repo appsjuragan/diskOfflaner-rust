@@ -37,12 +37,14 @@ pub struct DiskInfo {
     pub disk_type: DiskType,
     pub serial_number: Option<String>,
     pub health_percentage: Option<u8>,
+    pub usage_percentage: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartitionInfo {
     pub partition_number: u32,
     pub size_bytes: u64,
+    pub used_bytes: Option<u64>,
     pub drive_letter: String,
     pub partition_id: String,
 }

@@ -15,7 +15,7 @@ function App() {
 
   // Initialize state from local storage or defaults
   const [theme, setTheme] = createSignal(localStorage.getItem("theme") || "dark");
-  const [zoomLevel, setZoomLevel] = createSignal(parseFloat(localStorage.getItem("zoomLevel")) || 1);
+  const [zoomLevel, setZoomLevel] = createSignal(parseFloat(localStorage.getItem("zoomLevel")) || 0.8);
   const [safeMode, setSafeMode] = createSignal(localStorage.getItem("safeMode") === "true"); // Default false
   const [autoRefresh, setAutoRefresh] = createSignal(localStorage.getItem("autoRefresh") !== "false"); // Default true
 

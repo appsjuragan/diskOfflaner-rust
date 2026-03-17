@@ -45,6 +45,12 @@ function DiskCard(props) {
     return "var(--health-critical)";
   };
 
+  const getUsageColor = (percentage) => {
+    if (percentage <= 65) return "linear-gradient(90deg, #4ade80, #22c55e)"; // Green
+    if (percentage <= 80) return "linear-gradient(90deg, #fb923c, #f97316)"; // Orange
+    return "linear-gradient(90deg, #f87171, #ef4444)"; // Red
+  };
+
   const Icon = getIcon();
   const isUsb = () => props.disk.disk_type === "USBFlash";
   const canEject = () => props.disk.disk_type === "USBFlash" || props.disk.disk_type === "ExtHDD";
@@ -113,6 +119,10 @@ function DiskCard(props) {
             <span class="label">Serial</span>
             <span class="value serial">{props.disk.serial_number || "N/A"}</span>
           </div>
+          <div class="info-row">
+            <span class="label">Disk Usage</span>
+            <span class="value">{props.disk.usage_percentage !== null && props.disk.usage_percentage !== undefined ? `${Math.round(props.disk.usage_percentage)}%` : "N/A"}</span>
+          </div>
         </div>
 
         <div class="partition-list">
@@ -167,6 +177,18 @@ function DiskCard(props) {
           )}
         </div>
       </div>
+
+      {props.disk.usage_percentage !== null && props.disk.usage_percentage !== undefined && (
+        <div class="usage-bar-container">
+          <div
+            class="usage-bar-fill"
+            style={{
+              width: `${props.disk.usage_percentage}%`,
+              background: getUsageColor(props.disk.usage_percentage)
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

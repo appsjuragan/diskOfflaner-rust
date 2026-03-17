@@ -71,26 +71,28 @@
 }
 
 [data-theme="light"] {
-  --bg-app: #e4e5e7;
-  /* Darker off-white app bg */
-  --bg-sidebar: #f1f2f5;
-  /* Soft gray sidebar */
-  --bg-main: #ecedf1;
-  /* Muted main content area */
-  --bg-card: rgba(255, 255, 255, 0.65);
-  /* Less bright cards */
-  --bg-card-hover: rgba(255, 255, 255, 0.9);
-  --bg-sidebar-item: #e2e4e8;
-  --bg-sidebar-item-hover: #e8eaed;
+  --bg-app: #f8f9fb;
+  /* Very soft off-white background */
+  --bg-sidebar: #ffffff;
+  /* Pure white sidebar for clean look */
+  --bg-main: #f3f4f7;
+  /* Slightly darker main area for contrast */
+  --bg-card: #ffffff;
+  /* Solid white cards */
+  --bg-card-hover: #ffffff;
+  --bg-sidebar-item: #f1f3f6;
+  --bg-sidebar-item-hover: #f7f8fa;
 
-  --text-primary: #1f2937;
-  /* Softer charcoal black */
+  --text-primary: #111827;
+  /* Deep charcoal for better readability */
   --text-secondary: #4b5563;
-  /* Softer gray text */
+  /* Medium gray for labels */
   --text-tertiary: #9ca3af;
-  --text-value: #374151;
+  --text-value: #1f2937;
 
-  --border-card: rgba(0, 0, 0, 0.05);
+  --border-card: rgba(0, 0, 0, 0.06);
   /* Subtler borders */
-  --border-sidebar: rgba(0, 0, 0, 0.05);
+  --border-sidebar: rgba(0, 0, 0, 0.06);
+  --status-online-glow: rgba(74, 222, 128, 0.1);
+  --status-offline-glow: rgba(239, 68, 68, 0.1);
 }
